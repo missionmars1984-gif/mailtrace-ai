@@ -17,37 +17,48 @@ import type {
   IOCItem,
 } from '../types/index.js';
 import { CalibrationEngine } from './calibration.js';
+import { ModelC_SenderIdentityModel } from '../models/identityModel.js';
 
 export interface FusionWeights {
-  nlpModel: number;             // 18%
-  urlModel: number;             // 18%
-  identityModel: number;        // 17%
-  senderModel: number;          // 10%
-  becModel: number;             // 10%
-  financialModel: number;       // 7%
-  headerAuthModel: number;      // 7%
-  socialEngineering: number;    // 6%
-  attachmentModel: number;      // 5%
-  brandModel: number;           // 2%
+  nlpContext: number;           // 18%
+  identity: number;             // 16%
+  url: number;                  // 15%
+  sender: number;               // 10%
+  bec: number;                  // 10%
+  credentialMfa: number;        // 8%
+  financial: number;            // 7%
+  headerAuth: number;           // 6%
+  socialEngineering: number;    // 5%
+  attachmentMalware: number;    // 5%
+  // Optional aliases for backward compatibility
+  nlpModel?: number;
+  urlModel?: number;
+  identityModel?: number;
+  senderModel?: number;
+  becModel?: number;
+  financialModel?: number;
+  headerAuthModel?: number;
+  attachmentModel?: number;
+  brandModel?: number;
 }
 
 export const DEFAULT_FUSION_WEIGHTS: FusionWeights = {
-  nlpModel: 0.18,
-  urlModel: 0.18,
-  identityModel: 0.17,
-  senderModel: 0.10,
-  becModel: 0.10,
-  financialModel: 0.07,
-  headerAuthModel: 0.07,
-  socialEngineering: 0.06,
-  attachmentModel: 0.05,
-  brandModel: 0.02,
+  nlpContext: 0.18,
+  identity: 0.16,
+  url: 0.15,
+  sender: 0.10,
+  bec: 0.10,
+  credentialMfa: 0.08,
+  financial: 0.07,
+  headerAuth: 0.06,
+  socialEngineering: 0.05,
+  attachmentMalware: 0.05,
 };
 
 export interface RiskEngineEvaluationInput {
   nlpProbabilities: NlpProbabilities;
   nlpRisk: number;
-  urlRisk: number;
+  urlRisk: number | null;
   urls: ParsedUrl[];
   identityRisk: number;
   identityConsistencyScore: number;
@@ -76,6 +87,9 @@ export interface RiskEngineEvaluationInput {
   socialSignals: SocialEngineeringSignals;
   findings: SecurityFinding[];
   weights?: FusionWeights;
+  urlAnalysisStatus?: 'available' | 'unavailable' | 'none_present';
+  attachmentAnalysisStatus?: 'available' | 'unavailable' | 'none_present';
+  threatIntelStatus?: 'available' | 'unavailable' | 'none_present';
   parsedEmail?: {
     from: string;
     to: string[];
@@ -166,50 +180,76 @@ export class RiskEngine {
     behaviorContextRisk = Math.min(100, behaviorContextRisk);
 
     const activeAttachmentRisk = attachmentRisk !== null ? attachmentRisk : 0;
+    const activeUrlRisk = urlRisk !== null ? urlRisk : 0;
 
     // Pre-calculate component risks
-    const senderRisk = ModelC_Helper.calculateSenderRisk(identityAnalysis);
-    const replyToRisk = ModelC_Helper.calculateReplyToRisk(identityAnalysis);
-    const credentialRisk = Math.round(Math.min(100, Math.max(0, nlpProbabilities.credential_theft * 100)));
+    const senderRisk = ModelC_SenderIdentityModel.calculateSenderRisk(identityAnalysis);
+    const replyToRisk = ModelC_SenderIdentityModel.calculateReplyToRisk(identityAnalysis);
+    const credentialRisk = Math.round(Math.min(100, Math.max(0, (nlpProbabilities.credential_theft || 0) * 100)));
     const mfaRisk = Math.round(
-      Math.min(100, Math.max(0, findings.some((f) => /mfa|otp|2fa|authenticator/i.test(f.title + ' ' + f.observed)) ? 88 : nlpProbabilities.credential_theft * 70))
+      Math.min(100, Math.max(0, findings.some((f) => /mfa|otp|2fa|authenticator/i.test(f.title + ' ' + f.observed)) ? 95 : (nlpProbabilities.credential_theft || 0) * 70))
     );
     const financialRisk = Math.round(
-      Math.min(100, Math.max(0, becPatterns.hasBankAccountChange ? 96 : becPatterns.hasPaymentRequest ? 88 : nlpProbabilities.bec * 85))
+      Math.min(100, Math.max(0, becPatterns.hasBankAccountChange ? 96 : becPatterns.hasPaymentRequest ? 88 : (nlpProbabilities.bec || 0) * 85))
     );
     const brandRisk = Math.round(
-      Math.min(100, Math.max(0, identityAnalysis.lookalikeDomain ? 95 : identityAnalysis.displayNameSpoofing ? 85 : 0))
+      Math.min(100, Math.max(0, identityAnalysis.lookalikeDomain ? 96 : identityAnalysis.displayNameSpoofing ? 85 : 0))
+    );
+    const socialEngineeringRisk = Math.round(Math.min(100, Math.max(0, socialSignals.overallRisk)));
+
+    const hasDangerousAttachment = attachments.some((a) => a.isDangerous || a.isDoubleExtension);
+    const hasMacroAttachment = attachments.some((a) => a.isMacro);
+    const malwareRiskScore: number | null = (hasDangerousAttachment || hasMacroAttachment)
+      ? (hasDangerousAttachment ? 96 : 85)
+      : (nlpProbabilities.malware_delivery && nlpProbabilities.malware_delivery >= 0.5)
+      ? Math.round(nlpProbabilities.malware_delivery * 100)
+      : (attachmentRisk !== null ? attachmentRisk : null);
+
+    const hasDataExfil = findings.some((f) => /w-2|ssn|payroll|compensation/i.test(f.title + ' ' + f.observed));
+    const dataTheftRisk = Math.round(
+      Math.min(100, Math.max(0, hasDataExfil ? 95 : (nlpProbabilities.spear_phishing || 0) * 85))
     );
 
-    // 2. Base Evidence Weighting (proportional normalization for missing models)
+    // 2. Base Evidence Weighting (Section 10 Initial Weights)
+    const nlpWeight = weights.nlpContext ?? weights.nlpModel ?? 0.18;
+    const identityWeight = weights.identity ?? weights.identityModel ?? 0.16;
+    const urlWeight = weights.url ?? weights.urlModel ?? 0.15;
+    const senderWeight = weights.sender ?? weights.senderModel ?? 0.10;
+    const becWeight = weights.bec ?? weights.becModel ?? 0.10;
+    const credentialMfaWeight = weights.credentialMfa ?? 0.08;
+    const financialWeight = weights.financial ?? weights.financialModel ?? 0.07;
+    const headerAuthWeight = weights.headerAuth ?? weights.headerAuthModel ?? 0.06;
+    const socialWeight = weights.socialEngineering ?? 0.05;
+    const attachmentMalwareWeight = weights.attachmentMalware ?? weights.attachmentModel ?? 0.05;
+
     let activeWeightsSum =
-      weights.nlpModel +
-      weights.identityModel +
-      weights.senderModel +
-      weights.becModel +
-      weights.financialModel +
-      weights.headerAuthModel +
-      weights.socialEngineering +
-      weights.brandModel;
+      nlpWeight +
+      identityWeight +
+      senderWeight +
+      becWeight +
+      credentialMfaWeight +
+      financialWeight +
+      headerAuthWeight +
+      socialWeight;
 
     let baseScoreSum =
-      nlpRisk * weights.nlpModel +
-      identityRisk * weights.identityModel +
-      senderRisk * weights.senderModel +
-      becRisk * weights.becModel +
-      financialRisk * weights.financialModel +
-      Math.max(authenticationRisk, headerRisk) * weights.headerAuthModel +
-      socialSignals.overallRisk * weights.socialEngineering +
-      brandRisk * weights.brandModel;
+      nlpRisk * nlpWeight +
+      identityRisk * identityWeight +
+      senderRisk * senderWeight +
+      becRisk * becWeight +
+      Math.max(credentialRisk, mfaRisk) * credentialMfaWeight +
+      financialRisk * financialWeight +
+      Math.max(authenticationRisk, headerRisk) * headerAuthWeight +
+      socialEngineeringRisk * socialWeight;
 
     if (urlRisk !== null && urls.length > 0) {
-      activeWeightsSum += weights.urlModel;
-      baseScoreSum += urlRisk * weights.urlModel;
+      activeWeightsSum += urlWeight;
+      baseScoreSum += urlRisk * urlWeight;
     }
 
     if (attachmentRisk !== null && attachments.length > 0) {
-      activeWeightsSum += weights.attachmentModel;
-      baseScoreSum += attachmentRisk * weights.attachmentModel;
+      activeWeightsSum += attachmentMalwareWeight;
+      baseScoreSum += Math.max(attachmentRisk, malwareRiskScore || 0) * attachmentMalwareWeight;
     }
 
     const weightedBase = activeWeightsSum > 0 ? baseScoreSum / activeWeightsSum : baseScoreSum;
@@ -220,7 +260,7 @@ export class RiskEngine {
     // A. Credential harvesting cascade: Credential request + Suspicious URL
     const hasCredentialCascade =
       (nlpProbabilities.credential_theft >= 0.70 || nlpProbabilities.phishing >= 0.75) &&
-      (urlRisk >= 60 || urls.some((u) => u.hasSuspiciousKeywords || u.isIpHost));
+      (activeUrlRisk >= 60 || urls.some((u) => u.hasSuspiciousKeywords || u.isIpHost));
 
     if (hasCredentialCascade) {
       const bonus = 28;
@@ -258,7 +298,7 @@ export class RiskEngine {
     // D. Brand impersonation + Domain mismatch
     const hasBrandSpoofingCascade =
       (identityAnalysis.lookalikeDomain || identityAnalysis.displayNameSpoofing || identityAnalysis.punycodeDetected) &&
-      (urlRisk >= 50 || nlpRisk >= 50 || identityRisk >= 60);
+      (activeUrlRisk >= 50 || nlpRisk >= 50 || identityRisk >= 60);
 
     if (hasBrandSpoofingCascade) {
       const bonus = 26;
@@ -292,8 +332,8 @@ export class RiskEngine {
     }
 
     // 4. Component contributors
-    if (urlRisk >= 70) {
-      addContributor('High-Risk Destination URL', Math.round(urlRisk * 0.22), 'URL Model', 'CRITICAL');
+    if (activeUrlRisk >= 70) {
+      addContributor('High-Risk Destination URL', Math.round(activeUrlRisk * 0.22), 'URL Model', 'CRITICAL');
     }
     if (nlpRisk >= 70) {
       addContributor('NLP Threat Semantic Classification', Math.round(nlpRisk * 0.22), 'NLP Model', 'CRITICAL');
@@ -318,7 +358,7 @@ export class RiskEngine {
     // 6. HARD RISK ESCALATION RULES (Section 11)
     // ========================================================
     // Rule 1: IF credential theft probability >= 0.80 AND suspicious URL risk >= 70 THEN min risk >= 75
-    if (nlpProbabilities.credential_theft >= 0.80 && urlRisk >= 70) {
+    if (nlpProbabilities.credential_theft >= 0.80 && activeUrlRisk >= 70) {
       if (rawScore < 76) {
         rawScore = 76;
         appliedEscalationRules.push('Escalation Safeguard: P(credential_theft) >= 0.80 & URL risk >= 70 -> Floor 76');
@@ -327,7 +367,7 @@ export class RiskEngine {
 
     // Rule 2: IF credential theft probability >= 0.90 AND identity inconsistency >= 80 AND URL risk >= 80 THEN min risk >= 90
     const identityInconsistency = 100 - identityConsistencyScore;
-    if (nlpProbabilities.credential_theft >= 0.90 && identityInconsistency >= 80 && urlRisk >= 80) {
+    if (nlpProbabilities.credential_theft >= 0.90 && identityInconsistency >= 80 && activeUrlRisk >= 80) {
       if (rawScore < 91) {
         rawScore = 91;
         appliedEscalationRules.push('Escalation Safeguard: P(credential_theft) >= 0.90 & Identity Inconsistency >= 80 & URL >= 80 -> Floor 91');
@@ -389,7 +429,7 @@ export class RiskEngine {
     }
 
     // Rule 7: IF High-Risk Destination URL with Credential Harvesting Pretext THEN min risk >= 82
-    if (urlRisk >= 68 && (nlpProbabilities.credential_theft >= 0.60 || nlpProbabilities.phishing >= 0.60 || nlpRisk >= 50 || socialSignals.urgency >= 60)) {
+    if (activeUrlRisk >= 68 && (nlpProbabilities.credential_theft >= 0.60 || nlpProbabilities.phishing >= 0.60 || nlpRisk >= 50 || socialSignals.urgency >= 60)) {
       if (rawScore < 82) {
         rawScore = 82;
         appliedEscalationRules.push('Escalation Safeguard: High-Risk Destination URL with Credential/Urgency Prompt -> Floor 82');
@@ -439,7 +479,7 @@ export class RiskEngine {
       nlpProbabilities.bec >= 0.40 ||
       nlpProbabilities.malware_delivery >= 0.40 ||
       nlpProbabilities.spear_phishing >= 0.40 ||
-      urlRisk >= 35 ||
+      activeUrlRisk >= 35 ||
       identityRisk >= 35 ||
       activeAttachmentRisk >= 40 ||
       becRisk >= 40 ||
@@ -473,7 +513,7 @@ export class RiskEngine {
 
     // 10. Threat Types Categorization
     const threatTypes: string[] = [];
-    if (nlpProbabilities.credential_theft >= 0.65 || urlRisk >= 65) {
+    if (nlpProbabilities.credential_theft >= 0.65 || activeUrlRisk >= 65) {
       threatTypes.push('Credential Phishing');
     }
     if (identityAnalysis.displayNameSpoofing || identityAnalysis.lookalikeDomain || identityAnalysis.punycodeDetected) {
@@ -510,30 +550,40 @@ export class RiskEngine {
       classification = 'Clean';
     }
 
-    // 12. Component Scores (Section 16 schema)
+    // 12. Component Scores (All 16 independent components & status tracking)
+    const urlAnalysisStatus = input.urlAnalysisStatus || (urls.length > 0 ? 'available' : 'none_present');
+    const attachmentAnalysisStatus = input.attachmentAnalysisStatus || (attachments.length > 0 ? 'available' : 'none_present');
+    const threatIntelStatus = input.threatIntelStatus || (threatIntelRisk !== null ? 'available' : 'none_present');
+
     const componentScores: ComponentScores = {
+      nlpRisk,
       senderRisk,
       identityRisk,
       replyToRisk,
-      urlRisk: urls.length > 0 ? (urlRisk !== null ? urlRisk : 0) : null,
-      nlpRisk,
+      headerRisk,
+      urlRisk: urls.length > 0 ? urlRisk : null,
       credentialRisk,
       mfaRisk,
       financialRisk,
       becRisk,
       brandRisk,
-      attachmentRisk: attachments.length > 0 ? (attachmentRisk !== null ? attachmentRisk : 0) : null,
-      headerRisk,
-      socialEngineeringRisk: socialSignals.overallRisk,
-      threatIntelRisk: threatIntelRisk,
+      socialEngineeringRisk,
+      attachmentRisk: attachments.length > 0 ? attachmentRisk : null,
+      malwareRisk: malwareRiskScore,
+      dataTheftRisk,
+      threatIntelRisk,
+      authenticationRisk,
       contentRisk: nlpRisk,
       benignEvidence: benignEvidenceScore,
+      urlAnalysisStatus,
+      attachmentAnalysisStatus,
+      threatIntelStatus,
     };
 
     // 13. Model Agreement & Diagnostic Confidence Calculation (Section 14)
     const { confidence, agreementRatio } = CalibrationEngine.calculateConfidence({
       nlpRisk,
-      urlRisk,
+      urlRisk: activeUrlRisk,
       identityRisk,
       headerRisk,
       attachmentRisk,
@@ -545,7 +595,7 @@ export class RiskEngine {
     // 14. Key Indicators
     const indicators: string[] = [];
     if (nlpProbabilities.credential_theft >= 0.70) indicators.push('Credential harvesting solicitation');
-    if (urlRisk >= 60) indicators.push('Suspicious destination URL detected');
+    if (activeUrlRisk >= 60) indicators.push('Suspicious destination URL detected');
     if (identityAnalysis.displayNameSpoofing) indicators.push('Display name impersonation');
     if (identityAnalysis.lookalikeDomain) indicators.push('Lookalike typosquatted domain');
     if (identityAnalysis.replyToMismatch) indicators.push('Reply-To routing diversion');
@@ -727,35 +777,12 @@ export class RiskEngine {
         identityScore: identityRisk,
         authScore: authenticationRisk,
         threatContentScore: nlpRisk,
-        urlScore: urlRisk,
+        urlScore: urlRisk !== null ? urlRisk : 0,
         attachmentScore: activeAttachmentRisk,
         infrastructureScore: headerRisk,
         synergyScore: synergyBonus,
         aiInfluenceScore: 0,
       },
     };
-  }
-}
-
-class ModelC_Helper {
-  static calculateSenderRisk(identity: IdentityAnalysis): number {
-    let score = 0;
-    if (identity.lookalikeDomain) score = Math.max(score, 95);
-    if (identity.punycodeDetected) score = Math.max(score, 95);
-    if (identity.displayNameSpoofing) score = Math.max(score, 85);
-    if (identity.returnPathMismatch) score = Math.max(score, 50);
-    return Math.min(100, score);
-  }
-
-  static calculateReplyToRisk(identity: IdentityAnalysis): number {
-    if (!identity.replyToMismatch) return 0;
-    let score = 75;
-    const replyTo = identity.observed.replyTo.toLowerCase();
-    if (replyTo.includes('harvest') || replyTo.includes('wire') || replyTo.includes('settlement') || replyTo.includes('drop')) {
-      score = 95;
-    } else if (replyTo.includes('proton') || replyTo.includes('gmail') || replyTo.includes('mailinator')) {
-      score = 88;
-    }
-    return Math.min(100, score);
   }
 }

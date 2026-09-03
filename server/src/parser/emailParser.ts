@@ -4,7 +4,10 @@ import type {
   EmailAddressInfo,
   AuthenticationResults,
   RouteHop,
+  NormalizedEmail,
+  ParsedAttachment,
 } from '../types/index.js';
+import { ModelE_AttachmentModel } from '../models/attachmentModel.js';
 
 export interface EmailParseResult {
   from: EmailAddressInfo;
@@ -28,6 +31,7 @@ export interface EmailParseResult {
     sha256?: string;
   }>;
   rawHeaders: Record<string, string | string[]>;
+  normalized: NormalizedEmail;
 }
 
 export class EmailParser {
@@ -156,6 +160,82 @@ export class EmailParser {
       }
     }
 
+    // 13. Extract all URLs from HTML and plain text
+    const urlMatches = new Set<string>();
+    const hrefRegex = /href=["'](https?:\/\/[^"'\s>]+)["']/gi;
+    let match: RegExpExecArray | null;
+    if (bodyHtml) {
+      while ((match = hrefRegex.exec(bodyHtml)) !== null) {
+        urlMatches.add(match[1].trim());
+      }
+    }
+    const plainUrlRegex = /(?:https?:\/\/|www\.)[^\s<>"'{}|\\^`\[\]]+/gi;
+    const allText = `${bodyText} ${bodyHtml || ''}`;
+    while ((match = plainUrlRegex.exec(allText)) !== null) {
+      let rawUrl = match[0].trim().replace(/[.,;:)\]]+$/, '');
+      if (rawUrl.startsWith('www.')) rawUrl = 'http://' + rawUrl;
+      urlMatches.add(rawUrl);
+    }
+    const urls = Array.from(urlMatches);
+
+    // 14. Extract Domains
+    const domainsSet = new Set<string>();
+    const extractDomain = (addr?: string) => {
+      if (!addr) return;
+      const clean = addr.toLowerCase().replace(/[<>]/g, '').trim();
+      if (clean.includes('@')) {
+        domainsSet.add(clean.split('@')[1].trim());
+      }
+    };
+    extractDomain(from.address);
+    to.forEach((t) => extractDomain(t.address));
+    cc.forEach((c) => extractDomain(c.address));
+    if (replyTo?.address) extractDomain(replyTo.address);
+    if (returnPath) extractDomain(returnPath);
+
+    for (const u of urls) {
+      try {
+        const parsedUrl = new URL(u.startsWith('http') ? u : `http://${u}`);
+        domainsSet.add(parsedUrl.hostname.toLowerCase());
+      } catch {
+        // Ignore invalid URL strings
+      }
+    }
+
+    // 15. Extract IPs
+    const ipsSet = new Set<string>();
+    for (const h of hops) {
+      if (h.ip && !h.isPrivate) ipsSet.add(h.ip);
+    }
+    for (const u of urls) {
+      const ipMatch = u.match(/(?:https?:\/\/)?(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
+      if (ipMatch) ipsSet.add(ipMatch[1]);
+    }
+
+    // 16. Analyze attachments into ParsedAttachment format
+    const parsedAttachments = ModelE_AttachmentModel.analyze(attachments).parsedAttachments;
+
+    const normalized: NormalizedEmail = {
+      from: from.address,
+      displayName: from.name || '',
+      to: to.map((t) => t.address),
+      cc: cc.map((c) => c.address),
+      replyTo: replyTo?.address,
+      returnPath: returnPath || from.address,
+      subject,
+      textBody: bodyText,
+      htmlBody: bodyHtml || '',
+      headers: rawHeaders,
+      receivedHops: hops,
+      attachments: parsedAttachments,
+      urls,
+      domains: Array.from(domainsSet),
+      ips: Array.from(ipsSet),
+      auth,
+      messageId,
+      date,
+    };
+
     return {
       from,
       to,
@@ -172,6 +252,7 @@ export class EmailParser {
       hops,
       attachments,
       rawHeaders,
+      normalized,
     };
   }
 

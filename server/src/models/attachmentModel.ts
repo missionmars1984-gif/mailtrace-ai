@@ -11,6 +11,7 @@ export interface RawAttachmentInput {
 
 export interface AttachmentModelOutput {
   attachmentRisk: number | null; // null if no attachments are analyzed (NOT 0)
+  attachmentAnalysisStatus: 'available' | 'unavailable' | 'none_present';
   attachmentCount: number;
   dangerousCount: number;
   parsedAttachments: ParsedAttachment[];
@@ -32,6 +33,7 @@ export class ModelE_AttachmentModel {
     if (!rawAttachments || rawAttachments.length === 0) {
       return {
         attachmentRisk: null, // Strictly null when not present
+        attachmentAnalysisStatus: 'none_present',
         attachmentCount: 0,
         dangerousCount: 0,
         parsedAttachments: [],
@@ -183,6 +185,7 @@ export class ModelE_AttachmentModel {
 
     return {
       attachmentRisk: maxRisk,
+      attachmentAnalysisStatus: 'available',
       attachmentCount: rawAttachments.length,
       dangerousCount,
       parsedAttachments,

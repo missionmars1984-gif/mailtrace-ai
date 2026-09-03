@@ -29,6 +29,8 @@ const BRAND_DOMAINS: Record<string, string> = {
   microsoft: 'microsoft.com',
   office365: 'microsoft.com',
   outlook: 'microsoft.com',
+  sharepoint: 'microsoft.com',
+  onedrive: 'microsoft.com',
   google: 'google.com',
   gmail: 'google.com',
   apple: 'apple.com',
@@ -44,6 +46,10 @@ const BRAND_DOMAINS: Record<string, string> = {
   adobe: 'adobe.com',
   docusign: 'docusign.com',
 };
+
+const SUSPICIOUS_TLDS = new Set([
+  'top', 'xyz', 'buzz', 'click', 'rest', 'bar', 'gq', 'cf', 'ml', 'tk', 'work', 'loan', 'cam', 'country', 'stream', 'kim', 'bid', 'surf', 'icu', 'monster', 'hair', 'beauty', 'quest', 'cfd', 'sbs'
+]);
 
 const FREE_WEBMAIL_PROVIDERS = new Set([
   'gmail.com',
@@ -238,6 +244,28 @@ export class ModelC_SenderIdentityModel {
       });
     }
 
+    // 7. Suspicious High-Abuse TLD Check
+    const tld = fromDomain.includes('.') ? fromDomain.split('.').pop()! : '';
+    if (SUSPICIOUS_TLDS.has(tld)) {
+      inconsistencyPoints += 30;
+      reasons.push(`Sending domain uses high-abuse/suspicious top-level domain (.${tld}).`);
+      findings.push({
+        type: 'IDENTITY',
+        severity: 'HIGH',
+        title: `Suspicious High-Abuse TLD (.${tld.toUpperCase()})`,
+        source: 'Sender model',
+        snippet: fromDomain,
+        observed: `Sender address registered under known high-abuse TLD: .${tld}`,
+        impact: 'High-risk infrastructure frequently utilized in disposable phishing operations.',
+      });
+    }
+
+    // 8. Domain Syntax Anomalies Check (excessive hyphens or numeric strings)
+    if (fromDomain.includes('--') || /^[0-9.-]+$/.test(fromDomain) || (fromDomain.match(/-/g) || []).length >= 3) {
+      inconsistencyPoints += 25;
+      reasons.push(`Sending domain syntax exhibits anomalies (excessive hyphens or numeric patterns).`);
+    }
+
     // Determine Consistency Rating
     let consistency: ConsistencyRating = 'HIGH';
     if (inconsistencyPoints >= 45) {
@@ -291,5 +319,26 @@ export class ModelC_SenderIdentityModel {
       findings,
       modelTier: 'HEURISTIC_IDENTITY_MODEL',
     };
+  }
+
+  static calculateSenderRisk(identity: IdentityAnalysis): number {
+    let score = 0;
+    if (identity.lookalikeDomain) score = Math.max(score, 95);
+    if (identity.punycodeDetected) score = Math.max(score, 95);
+    if (identity.displayNameSpoofing) score = Math.max(score, 85);
+    if (identity.returnPathMismatch) score = Math.max(score, 50);
+    return Math.min(100, score);
+  }
+
+  static calculateReplyToRisk(identity: IdentityAnalysis): number {
+    if (!identity.replyToMismatch) return 0;
+    let score = 75;
+    const replyTo = identity.observed.replyTo.toLowerCase();
+    if (replyTo.includes('harvest') || replyTo.includes('wire') || replyTo.includes('settlement') || replyTo.includes('drop')) {
+      score = 95;
+    } else if (replyTo.includes('proton') || replyTo.includes('gmail') || replyTo.includes('mailinator')) {
+      score = 88;
+    }
+    return Math.min(100, score);
   }
 }

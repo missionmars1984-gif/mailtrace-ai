@@ -92,8 +92,25 @@ ${bodyText.substring(0, 2500)}
 1. Classification MUST be one of: "Clean", "Suspicious", "Phishing", "BEC", "Impersonation", "Malware".
 2. You MUST NOT invent any technical facts, IPs, cities, countries, ASNs, hashes, or URLs. All technical telemetry is provided above.
 3. Compare Claimed Identity vs Observed Technical Identity. Passing SPF/DKIM/DMARC does NOT by itself prove innocence.
-4. Return ONLY a valid, single JSON object adhering to this strict schema without markdown codeblocks or outer prose:
+4. Evaluate multi-label probabilities independently (0.0 to 1.0) for:
+   - phishing intent, credential theft, MFA theft, BEC, impersonation, financial fraud, malware delivery, social engineering, sensitive-data harvesting, legitimate business context.
+5. Return ONLY a valid, single JSON object adhering strictly to this schema:
 {
+  "phishingProbability": <float 0.0-1.0>,
+  "credentialProbability": <float 0.0-1.0>,
+  "mfaProbability": <float 0.0-1.0>,
+  "becProbability": <float 0.0-1.0>,
+  "impersonationProbability": <float 0.0-1.0>,
+  "financialFraudProbability": <float 0.0-1.0>,
+  "malwareProbability": <float 0.0-1.0>,
+  "socialEngineeringProbability": <float 0.0-1.0>,
+  "dataTheftProbability": <float 0.0-1.0>,
+  "legitimateProbability": <float 0.0-1.0>,
+  "claimedIdentity": "<detected claimed sender/brand/authority>",
+  "attackIntent": "<credential_harvesting | mfa_theft | invoice_redirection | wire_fraud | malware_lure | data_exfiltration | delivery_scam | none>",
+  "requestedAction": "<password_reset | verify_mfa | wire_transfer | open_attachment | send_ssn_w2 | none>",
+  "targetType": "<employee | finance_team | executive | generic_user>",
+  "reasoningEvidence": ["<point 1>", "<point 2>", "..."],
   "classification": "Clean" | "Suspicious" | "Phishing" | "BEC" | "Impersonation" | "Malware",
   "risk_score": <number between 0 and 100>,
   "confidence": <number between 0 and 100>,
@@ -126,8 +143,29 @@ ${bodyText.substring(0, 2500)}
         ? parsed.classification
         : (parsed.classification === 'Legitimate' ? 'Clean' : 'Suspicious');
 
+      const clampProb = (val: any) => Math.min(1, Math.max(0, typeof val === 'number' ? val : 0));
       const risk_score = Math.min(100, Math.max(0, typeof parsed.risk_score === 'number' ? Math.round(parsed.risk_score) : 50));
       const confidence = Math.min(100, Math.max(0, typeof parsed.confidence === 'number' ? Math.round(parsed.confidence) : 80));
+
+      const aiReasoning = {
+        phishingProbability: clampProb(parsed.phishingProbability),
+        credentialProbability: clampProb(parsed.credentialProbability),
+        mfaProbability: clampProb(parsed.mfaProbability),
+        becProbability: clampProb(parsed.becProbability),
+        impersonationProbability: clampProb(parsed.impersonationProbability),
+        financialFraudProbability: clampProb(parsed.financialFraudProbability),
+        malwareProbability: clampProb(parsed.malwareProbability),
+        socialEngineeringProbability: clampProb(parsed.socialEngineeringProbability),
+        dataTheftProbability: clampProb(parsed.dataTheftProbability),
+        legitimateProbability: clampProb(parsed.legitimateProbability),
+        claimedIdentity: String(parsed.claimedIdentity || identity.claimed.displayName || from.name || ''),
+        attackIntent: String(parsed.attackIntent || 'none'),
+        requestedAction: String(parsed.requestedAction || 'none'),
+        targetType: String(parsed.targetType || 'generic_user'),
+        reasoningEvidence: Array.isArray(parsed.reasoningEvidence) ? parsed.reasoningEvidence.map(String) : [],
+        classification,
+        summary: typeof parsed.summary === 'string' ? parsed.summary : 'AI threat analysis completed.',
+      };
 
       return {
         classification,
@@ -140,6 +178,7 @@ ${bodyText.substring(0, 2500)}
         bec_indicators: Array.isArray(parsed.bec_indicators) ? parsed.bec_indicators.map(String) : [],
         recommended_actions: Array.isArray(parsed.recommended_actions) ? parsed.recommended_actions.map(String) : [],
         isFallback: false,
+        aiReasoning,
       };
     } catch (err) {
       console.warn('[MailTrace AI] Gemini inference failed or returned invalid response, falling back to deterministic analyzer:', err);

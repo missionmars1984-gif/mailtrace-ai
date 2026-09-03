@@ -24,6 +24,31 @@ export interface EmailAddressInfo {
   domain?: string;
 }
 
+/**
+ * Canonical RFC/MIME Normalized Email Object
+ * Every downstream detector must consume this canonical object without field loss.
+ */
+export interface NormalizedEmail {
+  from: string;
+  displayName: string;
+  to: string[];
+  cc: string[];
+  replyTo?: string;
+  returnPath?: string;
+  subject: string;
+  textBody: string;
+  htmlBody: string;
+  headers: Record<string, string | string[]>;
+  receivedHops: RouteHop[];
+  attachments: ParsedAttachment[];
+  urls: string[];
+  domains: string[];
+  ips: string[];
+  auth: AuthenticationResults;
+  messageId?: string;
+  date?: string;
+}
+
 export interface AuthenticationResults {
   spf: { status: 'pass' | 'fail' | 'softfail' | 'neutral' | 'none' | 'unknown'; details?: string; raw?: string };
   dkim: { status: 'pass' | 'fail' | 'neutral' | 'none' | 'unknown'; details?: string; raw?: string };
@@ -135,6 +160,30 @@ export interface NlpProbabilities {
   legitimate: number;
 }
 
+/**
+ * Structured AI Reasoning Output
+ * Multi-label probabilities and semantic intent telemetry from Google Gemini or Deterministic Fallback.
+ */
+export interface AiReasoningOutput {
+  phishingProbability: number;
+  credentialProbability: number;
+  mfaProbability: number;
+  becProbability: number;
+  impersonationProbability: number;
+  financialFraudProbability: number;
+  malwareProbability: number;
+  socialEngineeringProbability: number;
+  dataTheftProbability: number;
+  legitimateProbability: number;
+  claimedIdentity: string;
+  attackIntent: string;
+  requestedAction: string;
+  targetType: string;
+  reasoningEvidence: string[];
+  classification: ThreatClassification;
+  summary: string;
+}
+
 export interface SocialEngineeringSignals {
   urgency: number;
   authority: number;
@@ -150,23 +199,28 @@ export interface SocialEngineeringSignals {
 }
 
 export interface ComponentScores {
+  nlpRisk: number;
   senderRisk: number;
   identityRisk: number;
   replyToRisk: number;
+  headerRisk: number;
   urlRisk: number | null;
-  nlpRisk: number;
   credentialRisk: number;
   mfaRisk: number;
   financialRisk: number;
   becRisk: number;
   brandRisk: number;
-  attachmentRisk: number | null;
-  headerRisk: number;
-  authenticationRisk?: number;
   socialEngineeringRisk: number;
-  threatIntelRisk?: number | null;
+  attachmentRisk: number | null;
+  malwareRisk: number | null;
+  dataTheftRisk: number;
+  threatIntelRisk: number | null;
+  authenticationRisk?: number;
   contentRisk?: number;
   benignEvidence?: number;
+  urlAnalysisStatus?: 'available' | 'unavailable' | 'none_present';
+  attachmentAnalysisStatus?: 'available' | 'unavailable' | 'none_present';
+  threatIntelStatus?: 'available' | 'unavailable' | 'none_present';
 }
 
 export interface ModelAvailability {
@@ -194,7 +248,7 @@ export interface DebugTrace {
   extractedFeatures: Record<string, any>;
   nlpOutput: NlpProbabilities;
   urlOutput: {
-    urlRisk: number;
+    urlRisk: number | null;
     highestRiskUrl?: string;
     urlCount: number;
     features: any[];
@@ -293,6 +347,7 @@ export interface AiAssessment {
   recommended_actions: string[];
   isFallback: boolean;
   nlpProbabilities?: NlpProbabilities;
+  aiReasoning?: AiReasoningOutput;
 }
 
 export interface IOCItem {

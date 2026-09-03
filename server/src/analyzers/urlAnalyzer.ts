@@ -55,7 +55,7 @@ export class UrlAnalyzer {
   /**
    * Evaluates extracted URLs using Model B's Decision Forest structured feature ensemble.
    */
-  static analyze(rawUrls: string[]): { urls: ParsedUrl[]; findings: SecurityFinding[]; urlRisk: number } {
+  static analyze(rawUrls: string[]): { urls: ParsedUrl[]; findings: SecurityFinding[]; urlRisk: number | null } {
     const res: UrlModelOutput = ModelB_UrlRiskModel.analyzeUrls(rawUrls);
     return {
       urls: res.parsedUrls,

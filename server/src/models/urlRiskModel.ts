@@ -28,7 +28,8 @@ export interface UrlFeatures {
 }
 
 export interface UrlModelOutput {
-  urlRisk: number; // 0–100
+  urlRisk: number | null; // null if no URLs are analyzed (NOT 0)
+  urlReputationStatus: 'available' | 'unavailable' | 'none_present';
   highestRiskUrl?: string;
   features: UrlFeatures[];
   parsedUrls: ParsedUrl[];
@@ -151,7 +152,8 @@ export class ModelB_UrlRiskModel {
   static analyzeUrls(rawUrls: string[]): UrlModelOutput {
     if (!rawUrls || rawUrls.length === 0) {
       return {
-        urlRisk: 0,
+        urlRisk: null,
+        urlReputationStatus: 'none_present',
         features: [],
         parsedUrls: [],
         findings: [],
@@ -400,7 +402,8 @@ export class ModelB_UrlRiskModel {
     // Aggregate URL risk: Use highest-confidence malicious URL + aggregate multiplier
     if (featuresList.length === 0) {
       return {
-        urlRisk: 0,
+        urlRisk: null,
+        urlReputationStatus: 'none_present',
         features: [],
         parsedUrls: [],
         findings: [],
@@ -417,6 +420,7 @@ export class ModelB_UrlRiskModel {
 
     return {
       urlRisk,
+      urlReputationStatus: 'available',
       highestRiskUrl: highest.rawUrl,
       features: featuresList,
       parsedUrls,

@@ -1,5 +1,6 @@
 import type {
   AiAssessment,
+  AiReasoningOutput,
   IdentityAnalysis,
   SecurityFinding,
   ParsedUrl,
@@ -119,6 +120,105 @@ export class FallbackAnalyzer {
       ? `Deterministic forensic analysis classifies this email as Clean (Risk Score: ${risk_score}/100). Cryptographic authentication passed and structural telemetry verified.`
       : `Deterministic security engine identified severe threat indicators resulting in a verdict of ${classification.toUpperCase()} with an elevated risk score of ${risk_score}/100.`;
 
+    let phishingProbability = 0.02;
+    let credentialProbability = 0.01;
+    let mfaProbability = 0.01;
+    let becProbability = 0.01;
+    let impersonationProbability = 0.02;
+    let financialFraudProbability = 0.01;
+    let malwareProbability = 0.01;
+    let socialEngineeringProbability = 0.05;
+    let dataTheftProbability = 0.01;
+    let legitimateProbability = 0.95;
+
+    let attackIntent = 'none';
+    let requestedAction = 'none';
+    let targetType = 'generic_user';
+    const reasoningEvidence: string[] = [];
+
+    if (dangerousAttachments.length > 0 || macroAttachments.length > 0) {
+      malwareProbability = dangerousAttachments.length > 0 ? 0.96 : 0.85;
+      socialEngineeringProbability = Math.max(socialEngineeringProbability, 0.75);
+      legitimateProbability = 0.02;
+      attackIntent = 'malware_lure';
+      requestedAction = 'open_attachment';
+      reasoningEvidence.push('Direct payload execution or weaponized macro attachment observed.');
+    }
+
+    if (becFindings.length > 0) {
+      becProbability = 0.95;
+      financialFraudProbability = 0.92;
+      socialEngineeringProbability = Math.max(socialEngineeringProbability, 0.88);
+      legitimateProbability = 0.03;
+      targetType = 'finance_team';
+      const isBankChange = becFindings.some((f) => /bank|remittance|routing/i.test(f.title + ' ' + f.observed));
+      attackIntent = isBankChange ? 'invoice_redirection' : 'wire_fraud';
+      requestedAction = isBankChange ? 'update_banking_coordinates' : 'wire_transfer';
+      reasoningEvidence.push('Executive or vendor pretexts combined with wire transfer or banking alteration solicitations.');
+    }
+
+    if (identity.lookalikeDomain || identity.displayNameSpoofing) {
+      impersonationProbability = identity.lookalikeDomain ? 0.96 : 0.88;
+      socialEngineeringProbability = Math.max(socialEngineeringProbability, 0.82);
+      legitimateProbability = Math.min(legitimateProbability, 0.05);
+      if (attackIntent === 'none') attackIntent = 'brand_impersonation';
+      reasoningEvidence.push(identity.lookalikeDomain
+        ? `Lookalike domain targeting ${identity.lookalikeTarget || 'trusted brand'}.`
+        : 'Display name spoofing impersonating executive or recognizable brand.');
+    }
+
+    const hasMfaFinding = findings.some((f) => /mfa|otp|2fa|authenticator/i.test(f.title + ' ' + f.observed));
+    if (hasMfaFinding) {
+      mfaProbability = 0.96;
+      credentialProbability = Math.max(credentialProbability, 0.94);
+      phishingProbability = Math.max(phishingProbability, 0.92);
+      socialEngineeringProbability = Math.max(socialEngineeringProbability, 0.90);
+      legitimateProbability = 0.02;
+      attackIntent = 'mfa_theft';
+      requestedAction = 'verify_mfa';
+      reasoningEvidence.push('Solicitation for real-time MFA OTP codes or push authorization bypass.');
+    }
+
+    if (phishingFindings.length > 0 || highRiskUrls.length > 0) {
+      phishingProbability = Math.max(phishingProbability, 0.94);
+      credentialProbability = Math.max(credentialProbability, 0.92);
+      socialEngineeringProbability = Math.max(socialEngineeringProbability, 0.86);
+      legitimateProbability = Math.min(legitimateProbability, 0.04);
+      if (attackIntent === 'none') attackIntent = 'credential_harvesting';
+      if (requestedAction === 'none') requestedAction = 'password_reset';
+      reasoningEvidence.push('Credential harvesting patterns or high-risk destination link URLs detected.');
+    }
+
+    const hasDataExfilFinding = findings.some((f) => /w-2|ssn|payroll|compensation/i.test(f.title + ' ' + f.observed));
+    if (hasDataExfilFinding) {
+      dataTheftProbability = 0.95;
+      socialEngineeringProbability = Math.max(socialEngineeringProbability, 0.92);
+      legitimateProbability = 0.02;
+      attackIntent = 'data_exfiltration';
+      requestedAction = 'send_ssn_w2';
+      reasoningEvidence.push('Solicitation for sensitive unmasked employee PII and payroll records.');
+    }
+
+    const aiReasoning: AiReasoningOutput = {
+      phishingProbability,
+      credentialProbability,
+      mfaProbability,
+      becProbability,
+      impersonationProbability,
+      financialFraudProbability,
+      malwareProbability,
+      socialEngineeringProbability,
+      dataTheftProbability,
+      legitimateProbability,
+      claimedIdentity: identity.claimed.displayName || identity.claimed.domain || '',
+      attackIntent,
+      requestedAction,
+      targetType,
+      reasoningEvidence: reasoningEvidence.length > 0 ? reasoningEvidence : key_findings,
+      classification,
+      summary,
+    };
+
     return {
       classification,
       risk_score,
@@ -130,6 +230,7 @@ export class FallbackAnalyzer {
       bec_indicators,
       recommended_actions,
       isFallback: true,
+      aiReasoning,
     };
   }
 }

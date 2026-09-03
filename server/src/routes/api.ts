@@ -148,6 +148,8 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
     hops,
     socialSignals: socialOutput.signals,
     findings,
+    urlAnalysisStatus: urlModelOutput.urlReputationStatus,
+    attachmentAnalysisStatus: attachmentModelOutput.attachmentAnalysisStatus,
     parsedEmail: {
       from: parsed.from.address,
       to: parsed.to.map((t) => t.address),
@@ -956,4 +958,29 @@ apiRouter.get('/status', (_req: Request, res: Response) => {
     evidenceIntegrity: 'SHA-256 Active',
     database: 'SQLite (node:sqlite) Connected',
   });
+});
+
+// POST /api/debug/analyze - Development diagnostic audit endpoint (Section 17)
+apiRouter.post('/debug/analyze', async (req: Request, res: Response) => {
+  try {
+    const rawEmail = req.body?.rawEmail || req.body?.email || req.body?.content;
+    if (!rawEmail) {
+      return res.status(400).json({ error: 'Missing rawEmail payload for diagnostic analysis' });
+    }
+
+    const caseRecord = await runAnalysisPipeline(rawEmail);
+    return res.json({
+      success: true,
+      caseNumber: caseRecord.caseNumber,
+      riskScore: caseRecord.riskScore,
+      confidence: caseRecord.confidence,
+      classification: caseRecord.classification,
+      threatTypes: caseRecord.threatTypes,
+      componentScores: caseRecord.componentScores,
+      evidence: caseRecord.evidence,
+      debugTrace: caseRecord.debugTrace,
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Diagnostic pipeline execution failed' });
+  }
 });
