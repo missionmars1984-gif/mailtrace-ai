@@ -162,6 +162,7 @@ export interface ComponentScores {
   brandRisk: number;
   attachmentRisk: number | null;
   headerRisk: number;
+  authenticationRisk?: number;
   socialEngineeringRisk: number;
   threatIntelRisk?: number | null;
   contentRisk?: number;

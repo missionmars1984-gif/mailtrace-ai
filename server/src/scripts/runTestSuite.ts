@@ -70,7 +70,7 @@ async function runSuite() {
     console.log(`  Expected: ${testCase.expectedClassification} (Range: ${testCase.expectedMinRisk}–${testCase.expectedMaxRisk}) | Result: ${statusBadge}`);
     console.log(`  Actual Risk Score: ${actualRisk}/100 | Confidence: ${confidence}% | Classification: ${actualClass}`);
     console.log(
-      `  Components: NLP=${caseRecord.componentScores?.nlpRisk} URL=${caseRecord.componentScores?.urlRisk} Identity=${caseRecord.componentScores?.identityRisk} BEC=${caseRecord.componentScores?.becRisk} Auth=${caseRecord.componentScores?.authenticationRisk} Att=${caseRecord.componentScores?.attachmentRisk ?? 'null'}`
+      `  Components: NLP=${caseRecord.componentScores?.nlpRisk} URL=${caseRecord.componentScores?.urlRisk} Identity=${caseRecord.componentScores?.identityRisk} BEC=${caseRecord.componentScores?.becRisk} Auth=${caseRecord.componentScores?.headerRisk ?? caseRecord.componentScores?.authenticationRisk} Att=${caseRecord.componentScores?.attachmentRisk ?? 'null'}`
     );
     console.log(`  Key Indicators: ${(caseRecord.indicators || []).slice(0, 3).join('; ') || 'None'}`);
     if (isFalsePositive) console.log(`  ⚠️ ALERT: False Positive Detected!`);
