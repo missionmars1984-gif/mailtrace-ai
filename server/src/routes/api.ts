@@ -14,7 +14,7 @@ import { GeminiClient } from '../ai/geminiClient.js';
 import { RiskEngine } from '../scoring/riskEngine.js';
 import { ForensicHashService } from '../crypto/forensicHash.js';
 import { DatabaseService } from '../db/database.js';
-import { geoProvider } from '../services/geoLocationProvider.js';
+import { GeoLocationProvider, geoProvider } from '../services/geoLocationProvider.js';
 import type {
   CaseRecord,
   SecurityFinding,
@@ -47,8 +47,8 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
   // 1. Parse raw email & extract RFC822 envelope and body structures
   const parsed = await EmailParser.parse(rawEmailContent);
 
-  // 2. Identify sending IP from innermost hop
-  const originHop = parsed.hops.length > 0 ? parsed.hops[parsed.hops.length - 1] : undefined;
+  // 2. Identify sending IP from earliest public origin hop or chronological Hop #1
+  const originHop = parsed.hops.find((h) => h.ip && !GeoLocationProvider.isPrivateOrReserved(h.ip).isPrivate) || parsed.hops[0];
   const sendingIp = originHop?.ip;
 
   // 3. Extract all URLs (HTML hrefs, plain text, angle-brackets, www domains)
@@ -115,6 +115,13 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
 
   // 11. Route & Infrastructure enrichment with real GeoIP
   const { hops, findings: infraFindings, diagnostic: geoDiagnostic, observedOriginRelay } = await InfrastructureAnalyzer.enrichHops(parsed.hops);
+
+  // Update observed sendingIp with the verified observedOriginRelay
+  if (observedOriginRelay?.ip) {
+    identityModelOutput.identityAnalysis.observed.sendingIp = observedOriginRelay.ip;
+  } else if (hops[0]?.ip) {
+    identityModelOutput.identityAnalysis.observed.sendingIp = hops[0].ip;
+  }
 
   // Consolidate findings across all independent models
   const findings: SecurityFinding[] = [

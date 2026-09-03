@@ -39,32 +39,60 @@ export const ThreatMapPage: React.FC = () => {
 
   useEffect(() => {
     loadMapData();
+
+    // Listen to real-time email-analyzed events to auto-refresh map
+    let eventSource: EventSource | null = null;
+    try {
+      const apiBase = ((import.meta as any).env?.VITE_API_URL || '').replace(/\/$/, '') + '/api';
+      eventSource = new EventSource(`${apiBase}/live/stream`);
+      eventSource.addEventListener('email-analyzed', () => {
+        loadMapData();
+      });
+    } catch {}
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+      }
+    };
   }, []);
 
   // Initialize Leaflet map
   useEffect(() => {
     if (!mapContainerRef.current) return;
 
-    if (!mapInstanceRef.current) {
-      const map = L.map(mapContainerRef.current, {
-        center: [20, 0],
-        zoom: 2,
-        minZoom: 2,
-        maxZoom: 14,
-        zoomControl: true,
-      });
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-        maxZoom: 18,
-      }).addTo(map);
-
-      const markersGroup = L.layerGroup().addTo(map);
-      mapInstanceRef.current = map;
-      markersLayerRef.current = markersGroup;
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
     }
 
+    if ((mapContainerRef.current as any)._leaflet_id) {
+      delete (mapContainerRef.current as any)._leaflet_id;
+    }
+
+    const map = L.map(mapContainerRef.current, {
+      center: [20, 0],
+      zoom: 2,
+      minZoom: 2,
+      maxZoom: 14,
+      zoomControl: true,
+    });
+
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+      maxZoom: 18,
+    }).addTo(map);
+
+    const markersGroup = L.layerGroup().addTo(map);
+    mapInstanceRef.current = map;
+    markersLayerRef.current = markersGroup;
+
+    const timer = setTimeout(() => {
+      map.invalidateSize();
+    }, 250);
+
     return () => {
+      clearTimeout(timer);
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -142,6 +170,8 @@ export const ThreatMapPage: React.FC = () => {
       marker.on('click', () => setSelectedNode(node));
       markersLayerRef.current?.addLayer(marker);
     });
+
+    mapInstanceRef.current?.invalidateSize();
   }, [mapData]);
 
   return (

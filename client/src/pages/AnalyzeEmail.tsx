@@ -23,6 +23,7 @@ import {
 import { ApiService } from '../services/api.js';
 import type { CaseRecord } from '../types.js';
 import { RiskBadge } from '../components/common/RiskBadge.js';
+import { GeoTab } from '../components/investigation/GeoTab.js';
 
 export const AnalyzeEmail: React.FC = () => {
   const navigate = useNavigate();
@@ -505,14 +506,19 @@ export const AnalyzeEmail: React.FC = () => {
                   </div>
                   <div>
                     <dt className="text-[#68809F] font-medium">Sending Origin IP:</dt>
-                    <dd className="font-mono text-[#0B1F3A] font-bold mt-0.5">
-                      {analyzedCase.identityAnalysis.observed.sendingIp || 'Not Available'}
+                    <dd className="font-mono text-[#0B1F3A] font-bold mt-0.5 flex items-center gap-1.5">
+                      {analyzedCase.observedOriginRelay?.ip || analyzedCase.identityAnalysis.observed.sendingIp || 'Not Available'}
+                      {analyzedCase.observedOriginRelay?.geo?.countryCode && (
+                        <span className="text-[10px] px-1.5 py-0.2 bg-blue-50 text-blue-700 rounded border border-blue-200">
+                          {analyzedCase.observedOriginRelay.geo.countryCode}
+                        </span>
+                      )}
                     </dd>
                   </div>
                   <div>
                     <dt className="text-[#68809F] font-medium">Observed Mail Relay Host:</dt>
-                    <dd className="font-mono text-[#0B1F3A] mt-0.5 truncate">
-                      {analyzedCase.hops[analyzedCase.hops.length - 1]?.from || 'Inbound Mail Gateway'}
+                    <dd className="font-mono text-[#0B1F3A] mt-0.5 truncate" title={analyzedCase.observedOriginRelay?.from || analyzedCase.hops[0]?.from}>
+                      {analyzedCase.observedOriginRelay?.from || analyzedCase.hops[0]?.from || 'Inbound Mail Gateway'}
                     </dd>
                   </div>
                   <div>
@@ -571,11 +577,13 @@ export const AnalyzeEmail: React.FC = () => {
               </span>
             </div>
 
-            {/* Mandatory Forensic Disclaimer */}
-            <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl text-xs text-blue-950 flex items-start gap-2">
-              <Globe2 className="w-4 h-4 text-[#246BFE] flex-shrink-0 mt-0.5" />
-              <div>
-                IP geolocation represents approximate network infrastructure location. It does not prove the physical location or identity of the human sender.
+            {/* Embedded Interactive Geolocation Map & Telemetry */}
+            <GeoTab caseData={analyzedCase} />
+
+            {/* Detailed Transport Hops Breakdown */}
+            <div className="pt-2">
+              <div className="text-xs font-bold text-[#0B1F3A] mb-2 uppercase tracking-wider">
+                Full Technical Transport Route Table:
               </div>
             </div>
 

@@ -77,34 +77,9 @@ export class GeoLocationProvider implements IGeoLocationProvider {
         return { isPrivate: true, type: 'PRIVATE', reason: 'RFC 1918 Private Network (172.16.0.0/12)' };
       }
 
-      // 192.0.0.0/24 (IETF Protocol Assignments / RFC 6890)
-      if (p0 === 192 && p1 === 0 && p2 === 0) {
-        return { isPrivate: true, type: 'RESERVED', reason: 'RFC 6890 IETF Protocol Assignments' };
-      }
-
-      // 192.0.2.0/24 (TEST-NET-1 / Documentation / RFC 5737)
-      if (p0 === 192 && p1 === 0 && p2 === 2) {
-        return { isPrivate: true, type: 'RESERVED', reason: 'RFC 5737 TEST-NET-1 Documentation' };
-      }
-
       // 192.168.0.0/16 (Private-Use / RFC 1918)
       if (p0 === 192 && p1 === 168) {
         return { isPrivate: true, type: 'PRIVATE', reason: 'RFC 1918 Private Network (192.168.0.0/16)' };
-      }
-
-      // 198.18.0.0/15 (Network Interconnect Benchmark Testing / RFC 2544)
-      if (p0 === 198 && (p1 === 18 || p1 === 19)) {
-        return { isPrivate: true, type: 'RESERVED', reason: 'RFC 2544 Benchmark Testing' };
-      }
-
-      // 198.51.100.0/24 (TEST-NET-2 / Documentation / RFC 5737)
-      if (p0 === 198 && p1 === 51 && p2 === 100) {
-        return { isPrivate: true, type: 'RESERVED', reason: 'RFC 5737 TEST-NET-2 Documentation' };
-      }
-
-      // 203.0.113.0/24 (TEST-NET-3 / Documentation / RFC 5737)
-      if (p0 === 203 && p1 === 0 && p2 === 113) {
-        return { isPrivate: true, type: 'RESERVED', reason: 'RFC 5737 TEST-NET-3 Documentation' };
       }
 
       // 224.0.0.0/4 (Multicast / RFC 5771)

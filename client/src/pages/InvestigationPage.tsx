@@ -57,9 +57,14 @@ export const InvestigationPage: React.FC = () => {
   const { caseId } = useParams<{ caseId?: string }>();
   const navigate = useNavigate();
   const [caseData, setCaseData] = useState<CaseRecord | null>(null);
+  const [allCases, setAllCases] = useState<CaseRecord[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
   const [copiedId, setCopiedId] = useState<boolean>(false);
+
+  useEffect(() => {
+    ApiService.getCases().then(setAllCases).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const fetchTargetCase = async () => {
@@ -188,13 +193,30 @@ export const InvestigationPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Right quick telemetry & Delete button */}
-        <div className="flex items-center space-x-4 text-xs font-mono text-slate-500 self-start sm:self-auto">
-          <div>
+        {/* Right quick telemetry & Case Switcher & Delete button */}
+        <div className="flex flex-wrap items-center gap-3 text-xs font-mono text-slate-500 self-start sm:self-auto">
+          {allCases.length > 1 && (
+            <div className="flex items-center gap-1.5 font-sans">
+              <span className="font-semibold text-slate-600 hidden lg:inline">Case:</span>
+              <select
+                value={caseData.id}
+                onChange={(e) => navigate(`/investigation/${e.target.value}`)}
+                className="bg-slate-50 border border-slate-200 text-slate-800 rounded-lg px-2.5 py-1 text-xs font-mono font-medium focus:outline-none focus:border-blue-500 max-w-[200px] truncate shadow-2xs"
+                title="Switch active forensic investigation"
+              >
+                {allCases.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.caseNumber} — {c.metadata.subject.substring(0, 24)}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+          <div className="border-l border-slate-200 pl-3">
             <span className="text-[10px] text-slate-400 uppercase font-sans font-bold block">Confidence</span>
             <strong className="text-slate-800">{caseData.confidence}%</strong>
           </div>
-          <div className="border-l border-slate-200 pl-4">
+          <div className="border-l border-slate-200 pl-3">
             <span className="text-[10px] text-slate-400 uppercase font-sans font-bold block">Artifacts</span>
             <strong className="text-slate-800">{caseData.findings.length} findings</strong>
           </div>

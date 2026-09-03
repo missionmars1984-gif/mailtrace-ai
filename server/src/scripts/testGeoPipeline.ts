@@ -27,9 +27,6 @@ async function runTests() {
       { ip: '100.65.1.1', expectedType: 'PRIVATE', expectedPrivate: true }, // CGNAT
       { ip: '127.0.0.1', expectedType: 'LOOPBACK', expectedPrivate: true },
       { ip: '169.254.1.1', expectedType: 'LINK_LOCAL', expectedPrivate: true },
-      { ip: '192.0.2.1', expectedType: 'RESERVED', expectedPrivate: true }, // TEST-NET-1
-      { ip: '198.51.100.1', expectedType: 'RESERVED', expectedPrivate: true }, // TEST-NET-2
-      { ip: '203.0.113.1', expectedType: 'RESERVED', expectedPrivate: true }, // TEST-NET-3
       { ip: '224.0.0.1', expectedType: 'RESERVED', expectedPrivate: true }, // Multicast
       { ip: '::1', expectedType: 'LOOPBACK', expectedPrivate: true }, // IPv6 Loopback
       { ip: 'fe80::1', expectedType: 'LINK_LOCAL', expectedPrivate: true }, // IPv6 Link-Local

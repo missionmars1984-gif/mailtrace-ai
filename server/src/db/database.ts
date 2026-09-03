@@ -113,6 +113,16 @@ try {
 try {
   db.exec(`ALTER TABLE geo_locations ADD COLUMN status_message TEXT`);
 } catch {}
+try {
+  db.exec(`
+    DELETE FROM geo_locations WHERE 
+      ip LIKE '10.%' OR 
+      ip LIKE '192.168.%' OR 
+      ip LIKE '127.%' OR 
+      ip LIKE '169.254.%' OR
+      is_private = 1
+  `);
+} catch {}
 
 export class DatabaseService {
   /**
@@ -224,7 +234,17 @@ export class DatabaseService {
     const row = stmt.get(idOrCaseNumber, idOrCaseNumber) as { data_json: string } | undefined;
     if (!row) return null;
     try {
-      return JSON.parse(row.data_json) as CaseRecord;
+      const record = JSON.parse(row.data_json) as CaseRecord;
+      if (!record.observedOriginRelay && record.hops && record.hops.length > 0) {
+        const publicHop = record.hops.find((h) => h.ip && !h.isPrivate);
+        if (publicHop) {
+          publicHop.isPublicOriginRelay = true;
+          record.observedOriginRelay = publicHop;
+        } else {
+          record.observedOriginRelay = record.hops[0];
+        }
+      }
+      return record;
     } catch {
       return null;
     }
@@ -333,7 +353,19 @@ export class DatabaseService {
 
     const stmt = db.prepare(sql);
     const rows = stmt.all(...params) as Array<{ data_json: string }>;
-    return rows.map((r) => JSON.parse(r.data_json) as CaseRecord);
+    return rows.map((r) => {
+      const record = JSON.parse(r.data_json) as CaseRecord;
+      if (!record.observedOriginRelay && record.hops && record.hops.length > 0) {
+        const publicHop = record.hops.find((h) => h.ip && !h.isPrivate);
+        if (publicHop) {
+          publicHop.isPublicOriginRelay = true;
+          record.observedOriginRelay = publicHop;
+        } else {
+          record.observedOriginRelay = record.hops[0];
+        }
+      }
+      return record;
+    });
   }
 
   static deleteCase(idOrCaseNumber: string): boolean {
@@ -507,14 +539,24 @@ export class DatabaseService {
       for (const hop of c.hops) {
         if (!hop.ip) continue;
         const ip = hop.ip;
-        const isPrivate = Boolean(hop.isPrivate);
+        const isRfcPrivate =
+          ip.startsWith('10.') ||
+          ip.startsWith('192.168.') ||
+          ip.startsWith('127.') ||
+          ip.startsWith('169.254.') ||
+          /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(ip) ||
+          ip === '::1' ||
+          ip.startsWith('fe80:') ||
+          ip.startsWith('fc') ||
+          ip.startsWith('fd');
+        const isPrivate = Boolean(hop.isPrivate) || isRfcPrivate;
 
         if (isPrivate) {
           localLoopbackFiltered++;
           continue;
         }
 
-        const geo = hop.geo;
+        const geo = DatabaseService.getCachedGeoLocation(ip) || hop.geo;
         const lat = geo?.lat;
         const lon = geo?.lon;
 
