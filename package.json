@@ -1,0 +1,21 @@
+{
+  "name": "mailtrace-ai",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MailTrace AI — AI-powered email threat detection, investigation, geolocation and forensic intelligence platform",
+  "scripts": {
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "build:server": "npm --prefix server run build",
+    "build:client": "npm --prefix client run build",
+    "build": "npm run install:all && npm run build:server && npm run build:client",
+    "start": "node server/dist/index.js"
+  },
+  "engines": {
+    "node": ">=22.5.0"
+  },
+  "keywords": ["cybersecurity", "email-threat-intelligence", "forensics", "phishing", "bec", "gemini-ai"],
+  "author": "MailTrace AI Team",
+  "license": "ISC"
+}
