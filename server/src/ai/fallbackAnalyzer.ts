@@ -167,7 +167,9 @@ export class FallbackAnalyzer {
         : 'Display name spoofing impersonating executive or recognizable brand.');
     }
 
-    const hasMfaFinding = findings.some((f) => /mfa|otp|2fa|authenticator/i.test(f.title + ' ' + f.observed));
+    const hasMfaFinding =
+      findings.some((f) => /mfa|otp|2fa|authenticator|number\s+match|push\s+approval|session\s+sync/i.test(f.title + ' ' + f.observed)) ||
+      /(mfa|multi-factor|2fa|authenticator|number\s+match|verification\s+code|session\s+sync)/i.test(subject);
     if (hasMfaFinding) {
       mfaProbability = 0.96;
       credentialProbability = Math.max(credentialProbability, 0.94);
@@ -177,6 +179,29 @@ export class FallbackAnalyzer {
       attackIntent = 'mfa_theft';
       requestedAction = 'verify_mfa';
       reasoningEvidence.push('Solicitation for real-time MFA OTP codes or push authorization bypass.');
+    }
+
+    const hasCallbackFinding = becFindings.some((f) => /callback|vishing|helpline/i.test(f.title + ' ' + f.observed));
+    if (hasCallbackFinding) {
+      financialFraudProbability = Math.max(financialFraudProbability, 0.90);
+      socialEngineeringProbability = Math.max(socialEngineeringProbability, 0.94);
+      phishingProbability = Math.max(phishingProbability, 0.85);
+      legitimateProbability = 0.03;
+      attackIntent = 'callback_phishing';
+      requestedAction = 'call_phone_number';
+      reasoningEvidence.push('Callback phishing invoice scam prompting user to call fraudulent support line.');
+    }
+
+    const hasQuishingFinding =
+      becFindings.some((f) => /quishing|qr-code/i.test(f.title + ' ' + f.observed)) ||
+      /(qr\s+code|scan\s+(?:the\s+)?(?:code|image))/i.test(subject);
+    if (hasQuishingFinding) {
+      phishingProbability = Math.max(phishingProbability, 0.92);
+      credentialProbability = Math.max(credentialProbability, 0.90);
+      socialEngineeringProbability = Math.max(socialEngineeringProbability, 0.88);
+      legitimateProbability = Math.min(legitimateProbability, 0.04);
+      if (attackIntent === 'none') attackIntent = 'quishing_credential_harvest';
+      reasoningEvidence.push('QR code scanning redirection used to obfuscate credential harvesting payload.');
     }
 
     if (phishingFindings.length > 0 || highRiskUrls.length > 0) {

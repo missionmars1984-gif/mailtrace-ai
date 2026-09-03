@@ -24,6 +24,9 @@ export interface BecModelOutput {
     hasConfidentiality: boolean;
     hasBypassApproval: boolean;
     hasHighMonetaryValue: boolean;
+    hasCallbackPhishing?: boolean;
+    hasQuishing?: boolean;
+    hasFinancialDispute?: boolean;
   };
   findings: SecurityFinding[];
   modelTier: 'COMBINATORIAL_BEC_MODEL';
@@ -57,8 +60,11 @@ export class ModelD_BecModel {
 
     // 4. Bank Account / Routing Number Alteration
     const hasBankAccountChange =
-      /(new|updated?|change[d]?|revised|different|switch)\s+(bank|banking|routing|wire|remittance|account|iban|swift|provider)/i.test(fullText) ||
-      /(moved|transferred|switched)\s+(our\s+)?(receivables|processing|banking|accounts)/i.test(fullText) ||
+      /(new|updated?|change[d]?|revised|different|switch(?:ed)?)\s+(?:[\w\s]{0,25})?(bank|banking|routing|wire|remittance|account|iban|swift|provider|depository|settlement|payment\s+details)/i.test(fullText) ||
+      /(depository\s+institution|bank(?:ing)?\s+details?|remittance\s+details?|settlement\s+account|routing\s+transit\s+number)\s+(?:[\w\s]{0,20})?(has\s+changed|changed|updated)/i.test(fullText) ||
+      /(do\s+not\s+remit|stop\s+sending\s+payment|do\s+not\s+send)\s+.*?\b(previous|old|former)\b/i.test(fullText) ||
+      /(moved|transferred|switched)\s+(our\s+)?(receivables|processing|banking|accounts|depository)/i.test(fullText) ||
+      /(bank\s+name|account\s+name|routing\s+(?:transit\s+)?number|account\s+number|swift\/bic|iban)\s*:/i.test(fullText) ||
       /updated\s+remittance\s+details/i.test(fullText) ||
       /new\s+banking\s+provider/i.test(fullText) ||
       /(switch\s+payment\s+to|remit\s+to\s+new|deposit\s+to\s+(our\s+)?new)/i.test(fullText);
@@ -101,6 +107,22 @@ export class ModelD_BecModel {
       hasHighMonetaryValue = true;
       monetarySignals.push('$50,000+ indicated');
     }
+
+    // 11. Callback Phishing / Reverse Vishing Lure
+    const hasCallbackPhishing =
+      /(auto-?debit(?:ed)?|successfully\s+renewed|subscription\s+renewal|order\s+confirmation|total\s+protection\s+plan|membership\s+fee)/i.test(fullText) &&
+      /(toll-?free|helpline|support\s+line|call\s+us|contact\s+(?:our\s+)?dispute\s+department|\+\s?1\s?\([0-9]{3}\)|[0-9]{3}-[0-9]{4})/i.test(fullText) &&
+      /(refund|cancel(?:lation)?|did\s+not\s+authorize|dispute)/i.test(fullText);
+
+    // 12. Quishing / QR Code Lure
+    const hasQuishing =
+      /(qr\s+code|scan\s+(the\s+)?(code|image)|scan\s+with\s+your\s+phone|camera\s+and\s+scan)/i.test(fullText) &&
+      /(authenticator|mfa|2fa|login|verify|credential|enrollment|keep\s+active)/i.test(fullText);
+
+    // 13. Vendor Commercial Dispute / Delinquency Notice (Elevated AP Review without Fraud Indicators)
+    const hasFinancialDispute =
+      /(delinquent|past\s+due|overdue|collections|refer\s+(?:the\s+)?balance|pause\s+(?:our\s+)?support|unpaid\s+statement|unpaid\s+deliverables)/i.test(fullText) &&
+      /(invoice|payment|balance|statement|retainer|payable)/i.test(fullText);
 
     // ========================================================
     // COMBINATORIAL EVIDENCE CALCULATION
@@ -188,6 +210,48 @@ export class ModelD_BecModel {
         impact: 'Reroutes payroll funds into unauthorized accounts.',
       });
     }
+    // High Combination E2: Callback Phishing / Reverse Vishing Invoice Scam
+    else if (hasCallbackPhishing) {
+      becRisk = 88;
+      indicators.push('Callback phishing / reverse vishing invoice scam prompting phone cancellation');
+      findings.push({
+        type: 'BEC',
+        severity: 'HIGH',
+        title: 'Callback Phishing / Reverse Vishing Invoice Scam',
+        source: 'BEC model',
+        snippet: subject,
+        observed: 'Fraudulent auto-renewal invoice directing user to call a dispute phone helpline',
+        impact: 'Victim is socially engineered to contact a fraudulent call center run by attackers to facilitate remote access compromise.',
+      });
+    }
+    // High Combination E3: Quishing / QR-Code Credential Lure
+    else if (hasQuishing) {
+      becRisk = 82;
+      indicators.push('Quishing / QR-code credential redirection lure');
+      findings.push({
+        type: 'BEC',
+        severity: 'HIGH',
+        title: 'Quishing / QR-Code Credential Lure',
+        source: 'BEC model',
+        snippet: subject,
+        observed: 'Request to scan embedded QR code for multi-factor authentication enrollment',
+        impact: 'Bypasses email gateway URL inspection by transitioning the victim to an unmonitored mobile device.',
+      });
+    }
+    // Borderline Combination E4: Commercial Vendor Collections Dispute
+    else if (hasFinancialDispute && !hasBankAccountChange) {
+      becRisk = 45;
+      indicators.push('Commercial account delinquent notice / corporate collections dispute');
+      findings.push({
+        type: 'BEC',
+        severity: 'MEDIUM',
+        title: 'Commercial Account Delinquent Dispute',
+        source: 'BEC model',
+        snippet: subject,
+        observed: 'External vendor reporting overdue balance and threatening services suspension or collections',
+        impact: 'Elevated accounts payable priority; requires verification before disbursement.',
+      });
+    }
     // Moderate Combination F: Payment request alone
     else if (hasPaymentRequest) {
       becRisk = 40;
@@ -214,6 +278,9 @@ export class ModelD_BecModel {
         hasConfidentiality,
         hasBypassApproval,
         hasHighMonetaryValue,
+        hasCallbackPhishing,
+        hasQuishing,
+        hasFinancialDispute,
       },
       findings,
       modelTier: 'COMBINATORIAL_BEC_MODEL',

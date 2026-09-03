@@ -622,4 +622,343 @@ Let me know if that time works on your calendar.
 Thanks,
 Marcus`,
   },
+
+  // ========================================================
+  // U. MFA NUMBER MATCHING / AITM PHISHING
+  // ========================================================
+  {
+    id: 'U',
+    name: 'MFA Phishing - Number Matching & Session Replay Lure',
+    category: 'MFA Phishing',
+    expectedClassification: 'Critical',
+    expectedMinRisk: 80,
+    expectedMaxRisk: 100,
+    rawEmail: `Received: from mail-node.mfa-proxy-relay.org ([185.220.101.5]) by mx.targetcorp.com with ESMTP id mfa_021; Thu, 03 Sep 2026 15:30:00 +0000
+From: "Okta Identity Verification" <alerts@auth-session-sync.biz>
+To: target.user@targetcorp.com
+Subject: Action Required: Number Match Authentication Request (Code: 84)
+Date: Thu, 03 Sep 2026 15:30:00 +0000
+Message-ID: <okta-match-021@auth-session-sync.biz>
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+Authentication-Results: mx.targetcorp.com; spf=fail; dkim=fail; dmarc=fail
+
+<html><body>
+<h2>Okta Multi-Factor Authentication Alert</h2>
+<p>A sign-in request for your single sign-on corporate account requires secondary device approval.</p>
+<p>Verification Code: <strong style="font-size: 24px; color: #d9534f;">84</strong></p>
+<p>If you are currently signing in, tap <strong>84</strong> on your authenticator mobile app or confirm your identity at our session synchronization portal:</p>
+<p><a href="https://auth-session-sync.biz/sso/verify-token.php">Synchronize Identity & Approve MFA Session</a></p>
+<p><small>If you did not initiate this request, unauthorized access may be attempted. Confirm your credentials immediately to revoke pending sessions.</small></p>
+</body></html>`,
+  },
+
+  // ========================================================
+  // V. EXECUTIVE BEC - GIFT CARD PURCHASE
+  // ========================================================
+  {
+    id: 'V',
+    name: 'Executive BEC - Discretionary Gift Card Purchase',
+    category: 'BEC',
+    expectedClassification: 'Critical',
+    expectedMinRisk: 80,
+    expectedMaxRisk: 100,
+    rawEmail: `Received: from mail-relay.freemail-server.net ([198.51.100.201]) by mx.targetcorp.com with ESMTP id bec_022; Thu, 03 Sep 2026 15:45:00 +0000
+From: "David Sterling (CEO)" <david.sterling.targetcorp@gmail.com>
+To: target.user@targetcorp.com
+Reply-To: exec.office.confidential@mailinator.com
+Subject: Quick discretionary request - In a board meeting
+Date: Thu, 03 Sep 2026 15:45:00 +0000
+Message-ID: <giftcard-022@freemail-server.net>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+
+Hi,
+
+I'm tied up in confidential board reviews for the next few hours and cannot take calls.
+I need you to handle an urgent confidential task for me right away. We are presenting surprise recognition incentives to select project partners this evening.
+
+Please purchase 5 Apple Gift Cards at $200 each ($1,000 total) from a nearby store.
+Scratch the back, take clear photos of the redemption codes, and email them directly back to this thread.
+
+Keep this strictly between us until the official announcement. I will ensure Finance reimburses you before end of day.
+
+Thanks,
+David Sterling
+Chief Executive Officer`,
+  },
+
+  // ========================================================
+  // W. INVOICE FRAUD - THREAD HIJACKING
+  // ========================================================
+  {
+    id: 'W',
+    name: 'Invoice Fraud - Compromised Thread Hijack',
+    category: 'Invoice Fraud',
+    expectedClassification: 'Critical',
+    expectedMinRisk: 85,
+    expectedMaxRisk: 100,
+    rawEmail: `Received: from relay01.typo-vendor.com ([185.190.140.77]) by mx.targetcorp.com with ESMTP id inv_023; Thu, 03 Sep 2026 16:00:00 +0000
+From: "Apex Billing Department" <billing@apex-technol0gies.com>
+To: target.user@targetcorp.com
+Subject: Re: Outstanding Invoice #INV-88219 - Payment Processing
+Date: Thu, 03 Sep 2026 16:00:00 +0000
+Message-ID: <thread-hijack-023@apex-technol0gies.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+
+Hi TargetCorp Accounts Payable,
+
+Following up on the invoice #INV-88219 discussed below for $48,500.00.
+
+Please note that our primary merchant depository institution has changed due to an annual financial audit.
+Do NOT remit payment to the previous bank account on file.
+
+Please update our vendor payment details to our new settlement account:
+Bank Name: First Global Commercial Bank
+Account Name: Apex Technologies Settlement LLC
+Routing Transit Number: 021000089
+Account Number: 8839-2019-4412
+Swift/BIC: FGCBUS33
+
+Please confirm once the electronic wire transfer is initiated so we can issue your receipt without service disruption.
+
+Best regards,
+Apex Technologies Billing Operations`,
+  },
+
+  // ========================================================
+  // X. MALICIOUS SCRIPT ATTACHMENT (.VBS)
+  // ========================================================
+  {
+    id: 'X',
+    name: 'Malicious Script Payload - Voicemail Audio Dropper (.vbs)',
+    category: 'Malware Delivery',
+    expectedClassification: 'Critical',
+    expectedMinRisk: 85,
+    expectedMaxRisk: 100,
+    rawEmail: `Received: from mail.telecom-relay.org ([194.67.210.88]) by mx.targetcorp.com with ESMTP id mal_024; Thu, 03 Sep 2026 16:15:00 +0000
+From: "Corporate Voicemail System" <pbx-notification@telecom-cloud.net>
+To: target.user@targetcorp.com
+Subject: New Voicemail Received (38 seconds) - Caller ID: +1 (202) 555-0143
+Date: Thu, 03 Sep 2026 16:15:00 +0000
+Message-ID: <voicemail-024@telecom-cloud.net>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="----=_Part_VOICEMAIL_88192"
+
+------=_Part_VOICEMAIL_88192
+Content-Type: text/html; charset="UTF-8"
+
+<html><body>
+<h3>You have received a new voice message.</h3>
+<p><strong>Duration:</strong> 00:38</p>
+<p><strong>Caller:</strong> +1 (202) 555-0143</p>
+<p><strong>Date:</strong> Sep 03, 2026 16:14 UTC</p>
+<p>The audio recording and transcription are attached for your review.</p>
+</body></html>
+
+------=_Part_VOICEMAIL_88192
+Content-Type: application/x-vbs; name="Voicemail_Audio_Recording_38s.vbs"
+Content-Disposition: attachment; filename="Voicemail_Audio_Recording_38s.vbs"
+Content-Transfer-Encoding: base64
+
+J21hbGljaW91cyBzY3JpcHQgcGF5bG9hZCBzbmlwcGV0
+------=_Part_VOICEMAIL_88192--`,
+  },
+
+  // ========================================================
+  // Y. QUISHING / QR CODE CREDENTIAL LURE
+  // ========================================================
+  {
+    id: 'Y',
+    name: 'Quishing - QR Code Credential Lure',
+    category: 'Credential Phishing',
+    expectedClassification: 'High Risk',
+    expectedMinRisk: 70,
+    expectedMaxRisk: 95,
+    rawEmail: `Received: from relay02.auth-scanner.biz ([91.240.118.99]) by mx.targetcorp.com with ESMTP id qsh_025; Thu, 03 Sep 2026 16:30:00 +0000
+From: "Microsoft 365 Security Operations" <it-admin@m365-authenticator-setup.com>
+To: target.user@targetcorp.com
+Subject: Mandatory Security Upgrade: Scan QR Code to Keep Authenticator Active
+Date: Thu, 03 Sep 2026 16:30:00 +0000
+Message-ID: <quishing-025@m365-authenticator-setup.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+
+<html><body>
+<h2>Microsoft Authentication Architecture Update</h2>
+<p>TargetCorp is rolling out mandatory FIDO2 multi-factor protection.</p>
+<p>Due to upcoming security policy enforcement, your mobile device authenticator token must be re-registered within 48 hours.</p>
+<p>Please open your mobile camera and scan the secure enrollment QR code below, or visit <a href="https://login-m365-qr.net/auth">https://login-m365-qr.net/auth</a> to complete your identity verification:</p>
+<div style="border: 2px dashed #0B1F3A; padding: 20px; display: inline-block;">
+  [EMBEDDED SECURE ENROLLMENT QR CODE: https://login-m365-qr.net/auth]
+</div>
+<p>Failure to register before the maintenance deadline will lock your enterprise account.</p>
+</body></html>`,
+  },
+
+  // ========================================================
+  // Z. CALLBACK PHISHING (REVERSE VISHING)
+  // ========================================================
+  {
+    id: 'Z',
+    name: 'Callback Phishing - Fake Technical Support / Geek Squad Invoice',
+    category: 'Social Engineering',
+    expectedClassification: 'High Risk',
+    expectedMinRisk: 70,
+    expectedMaxRisk: 95,
+    rawEmail: `Received: from mail-relay.consumer-bill.org ([198.51.100.155]) by mx.targetcorp.com with ESMTP id cb_026; Thu, 03 Sep 2026 16:45:00 +0000
+From: "Geek Squad Protection Service" <subscriptions@geek-billing-care.com>
+To: target.user@targetcorp.com
+Subject: Invoice Confirmation: Order #GS-99182-X for $499.99 auto-debited
+Date: Thu, 03 Sep 2026 16:45:00 +0000
+Message-ID: <callback-026@geek-billing-care.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+
+<html><body>
+<h2>Geek Squad Annual Service Renewal</h2>
+<p>Dear Customer,</p>
+<p>Thank you for your ongoing subscription to Geek Squad Total Protection Plan.</p>
+<p>Your subscription has successfully renewed today. An amount of <strong>$499.99</strong> has been debited from your checking account / card on file.</p>
+<p><strong>Item Description:</strong> 3-Year Extended Antivirus, Firewall & Telephony Care</p>
+<p><strong>Order Number:</strong> GS-99182-X</p>
+<p>If you did not authorize this charge or wish to cancel your subscription and request an immediate refund, you must contact our dispute department within 24 hours at:</p>
+<p><strong style="font-size: 20px; color: #c9302c;">Toll-Free Support Line: +1 (800) 555-0199</strong></p>
+<p>Our representative will guide you through the refund verification process over the phone.</p>
+</body></html>`,
+  },
+
+  // ========================================================
+  // AA. BORDERLINE / AMBIGUOUS VENDOR DISPUTE
+  // ========================================================
+  {
+    id: 'AA',
+    name: 'Borderline Vendor Dispute - Overdue Balance Inquiry',
+    category: 'Suspicious',
+    expectedClassification: 'Suspicious',
+    expectedMinRisk: 35,
+    expectedMaxRisk: 60,
+    rawEmail: `Received: from mail.premier-consulting.com ([198.51.100.82]) by mx.targetcorp.com with ESMTP id dispute_027; Thu, 03 Sep 2026 17:00:00 +0000
+From: "Arthur Pendelton" <apendelton@premier-consulting.com>
+To: target.user@targetcorp.com
+Subject: URGENT: Delinquent account notice - Project Titan retainers
+Date: Thu, 03 Sep 2026 17:00:00 +0000
+Message-ID: <dispute-027@premier-consulting.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Authentication-Results: mx.targetcorp.com; spf=pass; dkim=pass; dmarc=none
+
+TargetCorp Accounts Payable Team,
+
+I am writing with grave concern regarding our outstanding statement for July and August consulting deliverables ($14,250.00), which is now 45 days overdue.
+
+We have attempted to reach your finance contact multiple times without response. If payment confirmation is not received by end of business Friday, we will be forced to pause our ongoing API migration support and refer the balance to corporate collections.
+
+Please review your records and reply with the payment transaction reference immediately.
+
+Arthur Pendelton
+Managing Partner, Premier Strategic Consulting
+Direct: +1 (312) 555-0142`,
+  },
+
+  // ========================================================
+  // BB. BORDERLINE INTERNAL URGENT REVIEW
+  // ========================================================
+  {
+    id: 'BB',
+    name: 'Borderline Internal Urgency - Urgent Confidential Executive Draft',
+    category: 'Low Risk',
+    expectedClassification: 'Low Risk',
+    expectedMinRisk: 15,
+    expectedMaxRisk: 40,
+    rawEmail: `Received: from mail.targetcorp.com ([192.0.2.10]) by mx.targetcorp.com with ESMTP id border_028; Thu, 03 Sep 2026 17:15:00 +0000
+From: "Elena Rostova" <elena.rostova@targetcorp.com>
+To: target.user@targetcorp.com
+Subject: Highly Confidential: Embargoed leadership transition announcement draft
+Date: Thu, 03 Sep 2026 17:15:00 +0000
+Message-ID: <internal-confidential-028@targetcorp.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Authentication-Results: mx.targetcorp.com; spf=pass; dkim=pass; dmarc=pass
+
+Hi,
+
+Please review the attached notes regarding the leadership transition announcement scheduled for tomorrow morning.
+Do not forward or share this with anyone outside the core comms team prior to the official 9:00 AM press release.
+
+Let me know by 6:00 PM if there are any factual corrections needed on the quote attribution.
+
+Thanks,
+Elena Rostova
+VP Corporate Communications | TargetCorp`,
+  },
+
+  // ========================================================
+  // CC. LEGITIMATE HR BENEFITS ENROLLMENT
+  // ========================================================
+  {
+    id: 'CC',
+    name: 'Legitimate HR Benefits Open Enrollment with External Portal',
+    category: 'Clean',
+    expectedClassification: 'Clean',
+    expectedMinRisk: 0,
+    expectedMaxRisk: 25,
+    rawEmail: `Received: from mail.targetcorp.com ([192.0.2.10]) by mx.targetcorp.com with ESMTP id legit_029; Thu, 03 Sep 2026 17:30:00 +0000
+From: "TargetCorp Human Resources" <hr-benefits@targetcorp.com>
+To: target.user@targetcorp.com
+Subject: Action Optional: 2027 Healthcare & Benefits Open Enrollment is Now Live
+Date: Thu, 03 Sep 2026 17:30:00 +0000
+Message-ID: <hr-benefits-029@targetcorp.com>
+MIME-Version: 1.0
+Content-Type: text/html; charset="UTF-8"
+Authentication-Results: mx.targetcorp.com; spf=pass; dkim=pass; dmarc=pass
+
+<html><body>
+<h2>TargetCorp Annual Benefits Open Enrollment</h2>
+<p>Dear TargetCorp Colleague,</p>
+<p>Our annual open enrollment window for 2027 healthcare, dental, and 401(k) retirement plans is open from October 1 through October 25.</p>
+<p>If you wish to keep your existing benefit elections, no action is required—your current coverage will automatically roll over.</p>
+<p>To view your coverage options, review plan comparison charts, or modify elections, please access our secure third-party benefits portal:</p>
+<p><a href="https://mybenefits.adp.com/targetcorp">https://mybenefits.adp.com/targetcorp</a></p>
+<p>Questions may be directed to our internal benefits helpdesk at benefits-support@targetcorp.com.</p>
+<p>Warm regards,<br>TargetCorp People & Culture Team</p>
+</body></html>`,
+  },
+
+  // ========================================================
+  // DD. LEGITIMATE IT INFRASTRUCTURE NOTIFICATION
+  // ========================================================
+  {
+    id: 'DD',
+    name: 'Legitimate IT Infrastructure Notice - Scheduled Network Maintenance',
+    category: 'Clean',
+    expectedClassification: 'Clean',
+    expectedMinRisk: 0,
+    expectedMaxRisk: 20,
+    rawEmail: `Received: from mail.targetcorp.com ([192.0.2.10]) by mx.targetcorp.com with ESMTP id legit_030; Thu, 03 Sep 2026 17:45:00 +0000
+From: "TargetCorp Network Operations" <noc-alerts@targetcorp.com>
+To: target.user@targetcorp.com
+Subject: Scheduled Maintenance Window: Data Center Core Switch Upgrade (Sunday 02:00-04:00 UTC)
+Date: Thu, 03 Sep 2026 17:45:00 +0000
+Message-ID: <noc-alert-030@targetcorp.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset="UTF-8"
+Authentication-Results: mx.targetcorp.com; spf=pass; dkim=pass; dmarc=pass
+
+Hello all,
+
+The TargetCorp Infrastructure Engineering team will perform scheduled firmware upgrades on our primary core network switches this Sunday, September 6, between 02:00 and 04:00 UTC.
+
+Impact:
+- Brief intermittent connectivity drops (under 3 minutes) may affect internal corporate VPN access during switch failover.
+- Cloud services (Microsoft 365, Slack, Jira) will remain accessible without interruption.
+
+Note: TargetCorp IT will never ask for your password or credentials during maintenance windows. No user action is required.
+
+For real-time infrastructure status, please check our internal status dashboard:
+https://status.internal.targetcorp.com
+
+TargetCorp Network Operations Center (NOC)`,
+  },
 ];

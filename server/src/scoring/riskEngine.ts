@@ -77,6 +77,9 @@ export interface RiskEngineEvaluationInput {
     hasConfidentiality: boolean;
     hasBypassApproval: boolean;
     hasHighMonetaryValue: boolean;
+    hasCallbackPhishing?: boolean;
+    hasQuishing?: boolean;
+    hasFinancialDispute?: boolean;
   };
   attachmentRisk: number | null;
   attachments: ParsedAttachment[];
@@ -354,6 +357,12 @@ export class RiskEngine {
     // 5. Calculate preliminary raw score
     let rawScore = Math.round(weightedBase * 1.35 + synergyBonus * 0.7);
 
+    // Text-only conversational lure ceiling: emails lacking both destination URLs and executable/binary attachments
+    // are conversational pretexts. Without active exploit or credential site, calibrated ceiling is 94.
+    if (urls.length === 0 && attachments.length === 0) {
+      rawScore = Math.min(94, rawScore);
+    }
+
     // ========================================================
     // 6. HARD RISK ESCALATION RULES (Section 11)
     // ========================================================
@@ -362,6 +371,33 @@ export class RiskEngine {
       if (rawScore < 76) {
         rawScore = 76;
         appliedEscalationRules.push('Escalation Safeguard: P(credential_theft) >= 0.80 & URL risk >= 70 -> Floor 76');
+      }
+    }
+
+    // Rule 1B: MFA Phishing / Push / Number Matching Cascade
+    if (mfaRisk >= 75 && (activeUrlRisk >= 35 || identityRisk >= 35)) {
+      const floor = 86;
+      if (rawScore < floor) {
+        rawScore = floor;
+        appliedEscalationRules.push(`Escalation Safeguard: MFA Phishing / Token Theft Pretext -> Floor ${floor}`);
+      }
+    }
+
+    // Rule 1C: Callback Phishing / Reverse Vishing Invoice Scam
+    if (becPatterns.hasCallbackPhishing) {
+      const floor = 84;
+      if (rawScore < floor) {
+        rawScore = floor;
+        appliedEscalationRules.push(`Escalation Safeguard: Callback Phishing / Reverse Vishing Invoice Scam -> Floor ${floor}`);
+      }
+    }
+
+    // Rule 1D: Quishing / QR-Code Credential Lure
+    if (becPatterns.hasQuishing) {
+      const floor = 78;
+      if (rawScore < floor) {
+        rawScore = floor;
+        appliedEscalationRules.push(`Escalation Safeguard: Quishing / QR-Code Credential Lure -> Floor ${floor}`);
       }
     }
 
@@ -420,11 +456,20 @@ export class RiskEngine {
     }
 
     // Rule 6B: Financial / Payment Request with Pretext or Anomalies
-    if (becPatterns.hasPaymentRequest && (becPatterns.hasUrgency || becPatterns.hasConfidentiality || becPatterns.hasBypassApproval || identityRisk >= 35 || nlpProbabilities.bec >= 0.50)) {
+    if (becPatterns.hasPaymentRequest && !becPatterns.hasFinancialDispute && (becPatterns.hasUrgency || becPatterns.hasConfidentiality || becPatterns.hasBypassApproval || identityRisk >= 35 || nlpProbabilities.bec >= 0.50)) {
       const floor = 85;
       if (rawScore < floor) {
         rawScore = floor;
         appliedEscalationRules.push(`Sanity Check Safeguard: High-Risk Payment/Wire Request -> Floor ${floor}`);
+      }
+    }
+
+    // Rule 6C: Commercial Collections / Accounts Payable Vendor Dispute (Suspicious Tier)
+    if (becPatterns.hasFinancialDispute && !becPatterns.hasBankAccountChange) {
+      const floor = 42;
+      if (rawScore < floor) {
+        rawScore = floor;
+        appliedEscalationRules.push(`Sanity Check Safeguard: Commercial Accounts Payable Dispute -> Floor ${floor} (Suspicious)`);
       }
     }
 
@@ -449,6 +494,27 @@ export class RiskEngine {
       if (rawScore < 80) {
         rawScore = 80;
         appliedEscalationRules.push('Escalation Safeguard: Confidential Data Exfiltration Lure -> Floor 80');
+      }
+    }
+
+    // Rule 9B: Internal Sensitive / Confidential Communication Floor
+    const fromAddr = input.parsedEmail?.from || input.identityAnalysis?.claimed?.email || '';
+    const toAddrs = input.parsedEmail?.to || [];
+    const fromDom = fromAddr.includes('@') ? fromAddr.split('@')[1]?.toLowerCase() : '';
+    const isInternalSender = Boolean(
+      fromDom &&
+      toAddrs.length > 0 &&
+      toAddrs.some((t: string) => {
+        const toDom = t.includes('@') ? t.split('@')[1]?.toLowerCase() : '';
+        return toDom && toDom === fromDom;
+      })
+    );
+
+    if (isInternalSender && (becPatterns.hasConfidentiality || socialSignals.secrecy >= 50 || /(embargoed|strictly\s+confidential|internal\s+only)/i.test((input.parsedEmail?.subject || '') + ' ' + (input.parsedEmail?.body || '')))) {
+      const floor = 22;
+      if (rawScore < floor) {
+        rawScore = floor;
+        appliedEscalationRules.push('Sanity Check Safeguard: Internal Confidential Document Handling -> Floor 22 (Low Risk)');
       }
     }
 

@@ -45,6 +45,13 @@ const BRAND_DOMAINS: Record<string, string> = {
   ups: 'ups.com',
   adobe: 'adobe.com',
   docusign: 'docusign.com',
+  okta: 'okta.com',
+  duo: 'duo.com',
+  geeksquad: 'bestbuy.com',
+  'geek squad': 'bestbuy.com',
+  norton: 'norton.com',
+  mcafee: 'mcafee.com',
+  bestbuy: 'bestbuy.com',
 };
 
 const SUSPICIOUS_TLDS = new Set([
