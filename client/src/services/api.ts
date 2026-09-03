@@ -7,6 +7,8 @@ import type {
   ReportRecord,
   CampaignCluster,
   AssistantMessage,
+  UserProfile,
+  AuthResponse,
 } from '../types.js';
 
 const API_BASE = ((import.meta as any).env?.VITE_API_URL || '').replace(/\/$/, '') + '/api';
@@ -239,5 +241,41 @@ export class ApiService {
     const res = await fetch(`${API_BASE}/status`);
     if (!res.ok) throw new Error('Failed to query engine status.');
     return res.json();
+  }
+
+  static async login(email: string, password: string): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Authentication failed.');
+    return data;
+  }
+
+  static async getMe(token: string): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE}/auth/me`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Session validation failed.');
+    return data;
+  }
+
+  static async logout(token?: string | null): Promise<void> {
+    if (!token) return;
+    try {
+      await fetch(`${API_BASE}/auth/logout`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    } catch {
+      // Ignore network errors during logout
+    }
   }
 }

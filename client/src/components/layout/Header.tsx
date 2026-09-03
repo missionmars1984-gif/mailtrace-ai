@@ -7,7 +7,11 @@ import {
   ChevronDown,
   ExternalLink,
   ShieldCheck,
+  LogOut,
+  User,
+  Settings,
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext.js';
 
 interface HeaderProps {
   onRefresh?: () => void;
@@ -19,6 +23,8 @@ export const Header: React.FC<HeaderProps> = ({ onRefresh }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [systemHealth, setSystemHealth] = useState<'HEALTHY' | 'DEGRADED' | 'UNAVAILABLE'>('HEALTHY');
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const { user, logout } = useAuth();
 
   React.useEffect(() => {
     const checkStatus = async () => {
@@ -157,17 +163,94 @@ export const Header: React.FC<HeaderProps> = ({ onRefresh }) => {
         <div className="h-6 w-px bg-[#E5E9F2]" />
 
         {/* Admin Profile Dropdown */}
-        <div
-          onClick={() => navigate('/settings')}
-          className="flex items-center space-x-2.5 pl-1 cursor-pointer select-none group"
-        >
-          <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#0B1F3A] to-[#246BFE] text-white flex items-center justify-center font-bold text-xs shadow-xs">
-            AD
-          </div>
-          <span className="text-xs font-bold text-[#0B1F3A] group-hover:text-[#246BFE] transition-colors hidden sm:inline">
-            Admin
-          </span>
-          <ChevronDown className="w-3.5 h-3.5 text-[#68809F] group-hover:text-[#0B1F3A]" />
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+            className="flex items-center space-x-2.5 pl-1 cursor-pointer select-none group focus:outline-none"
+          >
+            <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#0B1F3A] to-[#246BFE] text-white flex items-center justify-center font-bold text-xs shadow-xs">
+              {user?.avatarInitials || 'AM'}
+            </div>
+            <div className="text-left hidden sm:block">
+              <span className="text-xs font-bold text-[#0B1F3A] group-hover:text-[#246BFE] transition-colors block leading-tight">
+                {user?.name || 'Alex Mercer'}
+              </span>
+              <span className="text-[10px] text-[#68809F] block leading-tight">
+                {user?.role || 'Lead Analyst'}
+              </span>
+            </div>
+            <ChevronDown className={`w-3.5 h-3.5 text-[#68809F] group-hover:text-[#0B1F3A] transition-transform ${profileMenuOpen ? 'rotate-180' : ''}`} />
+          </button>
+
+          {profileMenuOpen && (
+            <>
+              {/* Backdrop */}
+              <div
+                className="fixed inset-0 z-20"
+                onClick={() => setProfileMenuOpen(false)}
+              />
+
+              {/* Dropdown Menu */}
+              <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-white border border-[#E5E9F2] shadow-xl shadow-slate-200/50 py-2 z-30">
+                {/* User Info Header */}
+                <div className="px-4 py-3 border-b border-[#E5E9F2]">
+                  <div className="text-xs font-bold text-[#0B1F3A] truncate">
+                    {user?.name || 'Alex Mercer'}
+                  </div>
+                  <div className="text-[11px] text-[#68809F] truncate mt-0.5">
+                    {user?.email || 'admin@mailtrace.ai'}
+                  </div>
+                  <div className="mt-2 inline-flex items-center space-x-1.5 px-2 py-0.5 rounded-md bg-[#EEF4FF] border border-[#246BFE]/20 text-[10px] font-semibold text-[#246BFE]">
+                    <ShieldCheck className="w-3 h-3" />
+                    <span>{user?.role || 'Lead Security Analyst'}</span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="py-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileMenuOpen(false);
+                      navigate('/settings');
+                    }}
+                    className="w-full px-4 py-2 text-left text-xs text-[#0B1F3A] hover:bg-[#F7F9FC] flex items-center space-x-2.5 transition-colors cursor-pointer"
+                  >
+                    <Settings className="w-4 h-4 text-[#68809F]" />
+                    <span>Console Settings</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileMenuOpen(false);
+                      navigate('/monitoring');
+                    }}
+                    className="w-full px-4 py-2 text-left text-xs text-[#0B1F3A] hover:bg-[#F7F9FC] flex items-center space-x-2.5 transition-colors cursor-pointer"
+                  >
+                    <User className="w-4 h-4 text-[#68809F]" />
+                    <span>Engine Telemetry</span>
+                  </button>
+                </div>
+
+                {/* Sign Out */}
+                <div className="pt-1 border-t border-[#E5E9F2]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setProfileMenuOpen(false);
+                      logout();
+                      navigate('/login');
+                    }}
+                    className="w-full px-4 py-2 text-left text-xs text-red-600 hover:bg-red-50 flex items-center space-x-2.5 transition-colors font-medium cursor-pointer"
+                  >
+                    <LogOut className="w-4 h-4 text-red-500" />
+                    <span>Lock Console / Sign Out</span>
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </header>

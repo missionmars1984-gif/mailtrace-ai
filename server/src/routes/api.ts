@@ -827,6 +827,125 @@ apiRouter.get('/settings', (_req: Request, res: Response) => {
 
 
 
+// ==========================================
+// AUTHENTICATION ROUTES
+// ==========================================
+
+interface AuthenticatedUser {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  department: string;
+  avatarInitials: string;
+  token: string;
+  lastLogin: string;
+}
+
+// In-memory active sessions cache
+const activeSessions = new Map<string, AuthenticatedUser>();
+
+// POST /api/auth/login - Authenticate SOC Analyst
+apiRouter.post('/auth/login', (req: Request, res: Response) => {
+  const { email, password } = req.body || {};
+
+  if (!email || !password) {
+    return res.status(400).json({ error: 'Email and password are required' });
+  }
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const trimmedPassword = String(password).trim();
+
+  let user: Omit<AuthenticatedUser, 'token' | 'lastLogin'> | null = null;
+
+  if (normalizedEmail === 'admin@mailtrace.ai') {
+    if (trimmedPassword === 'password123' || trimmedPassword === 'Admin@2026!') {
+      user = {
+        id: 'usr_soc_001',
+        name: 'Alex Mercer',
+        email: 'admin@mailtrace.ai',
+        role: 'Lead Security Analyst',
+        department: 'Cyber Threat Intelligence',
+        avatarInitials: 'AM',
+      };
+    }
+  } else if (normalizedEmail === 'forensics@mailtrace.ai') {
+    if (trimmedPassword === 'password123' || trimmedPassword === 'Forensics@2026!') {
+      user = {
+        id: 'usr_soc_002',
+        name: 'Sarah Chen',
+        email: 'forensics@mailtrace.ai',
+        role: 'Digital Forensics Specialist',
+        department: 'Incident Response & DFIR',
+        avatarInitials: 'SC',
+      };
+    }
+  } else if (normalizedEmail.includes('@') && trimmedPassword.length >= 6) {
+    const namePart = normalizedEmail.split('@')[0];
+    const capitalizedName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+    user = {
+      id: `usr_${Date.now().toString(36)}`,
+      name: capitalizedName,
+      email: normalizedEmail,
+      role: 'Security Analyst',
+      department: 'SOC Operations',
+      avatarInitials: capitalizedName.slice(0, 2).toUpperCase(),
+    };
+  }
+
+  if (!user) {
+    return res.status(401).json({
+      error: 'Invalid credentials. Use admin@mailtrace.ai / password123 or any corporate email with 6+ char password.'
+    });
+  }
+
+  const token = `mt_token_${Buffer.from(`${user.id}:${Date.now()}`).toString('base64')}`;
+  const sessionUser: AuthenticatedUser = {
+    ...user,
+    token,
+    lastLogin: new Date().toISOString(),
+  };
+
+  activeSessions.set(token, sessionUser);
+
+  return res.json({
+    success: true,
+    user: sessionUser,
+  });
+});
+
+// GET /api/auth/me - Validate session token
+apiRouter.get('/auth/me', (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+
+  if (!token) {
+    return res.status(401).json({ error: 'No authorization token provided' });
+  }
+
+  const sessionUser = activeSessions.get(token);
+  if (!sessionUser) {
+    return res.status(401).json({ error: 'Session expired or invalid' });
+  }
+
+  return res.json({
+    success: true,
+    user: sessionUser,
+  });
+});
+
+// POST /api/auth/logout - Invalidate session token
+apiRouter.post('/auth/logout', (req: Request, res: Response) => {
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : null;
+
+  if (token) {
+    activeSessions.delete(token);
+  }
+
+  return res.json({ success: true, message: 'Signed out successfully' });
+});
+
 // GET /api/status - Engine status & health
 apiRouter.get('/status', (_req: Request, res: Response) => {
   const hasGeminiKey = Boolean(process.env.GEMINI_API_KEY?.trim());

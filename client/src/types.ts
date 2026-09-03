@@ -389,3 +389,20 @@ export interface SystemEngineStatus {
   evidenceIntegrity: string;
   database: string;
 }
+
+export interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  department: string;
+  avatarInitials: string;
+  token: string;
+  lastLogin: string;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  user: UserProfile;
+  error?: string;
+}
