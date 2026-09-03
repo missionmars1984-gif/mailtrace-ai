@@ -1,4 +1,4 @@
-import type { RouteHop, SecurityFinding, GeoLocationData } from '../types/index.js';
+import type { RouteHop, SecurityFinding, GeoLocationData, GeoPipelineDiagnostic } from '../types/index.js';
 import { geoProvider, GeoLocationProvider } from '../services/geoLocationProvider.js';
 
 export class InfrastructureAnalyzer {
@@ -10,10 +10,16 @@ export class InfrastructureAnalyzer {
     return geoProvider.getLocation(ip);
   }
 
-  static async enrichHops(rawHops: RouteHop[]): Promise<{ hops: RouteHop[]; findings: SecurityFinding[] }> {
+  static async enrichHops(rawHops: RouteHop[]): Promise<{
+    hops: RouteHop[];
+    findings: SecurityFinding[];
+    diagnostic: GeoPipelineDiagnostic;
+    observedOriginRelay?: RouteHop;
+  }> {
     const findings: SecurityFinding[] = [];
     const enrichedHops: RouteHop[] = [];
 
+    // 1. Enrich every hop with classification, GeoIP, and ASN data
     for (let i = 0; i < rawHops.length; i++) {
       const hop = rawHops[i];
       const ip = hop.ip ? hop.ip.trim() : '';
@@ -28,49 +34,113 @@ export class InfrastructureAnalyzer {
       const enriched: RouteHop = {
         ...hop,
         isPrivate,
+        ipType: geo?.ipType,
         geo,
       };
 
       enrichedHops.push(enriched);
-
-      // Inspect originating hop (innermost/last hop in reverse transport order)
-      if (i === rawHops.length - 1 && ip) {
-        if (isPrivate) {
-          findings.push({
-            type: 'INFRASTRUCTURE',
-            severity: 'INFO',
-            title: 'Internal / Private Originating Relay',
-            source: 'Infrastructure',
-            observed: `Origin hop: ${ip} (${geo?.city || 'RFC 1918 Private'})`,
-            impact: 'Geolocation unavailable — private/internal IP. Mail server relayed through an intranet gateway or private upstream cluster.',
-          });
-        } else if (geo) {
-          const orgLower = (geo.org || '').toLowerCase();
-          const ispLower = (geo.isp || '').toLowerCase();
-
-          if (orgLower.includes('tor') || ispLower.includes('tor') || orgLower.includes('relay') || orgLower.includes('proxy')) {
-            findings.push({
-              type: 'INFRASTRUCTURE',
-              severity: 'CRITICAL',
-              title: 'Anonymizing Tor / Proxy Relay Origin',
-              source: 'Infrastructure',
-              observed: `Origin infrastructure: ${ip} (${geo.org || geo.isp || 'Tor Exit Node'})`,
-              impact: 'Sender routed transmission through an anonymized proxy network to obfuscate origin infrastructure.',
-            });
-          } else {
-            findings.push({
-              type: 'INFRASTRUCTURE',
-              severity: 'INFO',
-              title: 'Observed Public Infrastructure Relay',
-              source: 'Infrastructure',
-              observed: `Origin gateway: ${ip} [${geo.city ? geo.city + ', ' : ''}${geo.country}] (${geo.asn || 'Public ASN'} ${geo.org || ''})`,
-              impact: 'Observed email infrastructure geolocates to this autonomous network. Approximate network location; does not prove human sender identity.',
-            });
-          }
-        }
-      }
     }
 
-    return { hops: enrichedHops, findings };
+    // 2. Identify the Earliest Trustworthy Public Relay (Chronological Walk: Hop 1 -> Hop N)
+    // The first public IP encountered after internal client hops is the origin gateway into the public internet
+    const publicOriginHop = enrichedHops.find((h) => h.ip && !h.isPrivate);
+
+    if (publicOriginHop) {
+      publicOriginHop.isPublicOriginRelay = true;
+
+      const geo = publicOriginHop.geo;
+      const orgLower = (geo?.org || '').toLowerCase();
+      const ispLower = (geo?.isp || '').toLowerCase();
+      const isTorOrProxy = orgLower.includes('tor') || ispLower.includes('tor') || orgLower.includes('relay') || orgLower.includes('proxy');
+
+      if (isTorOrProxy) {
+        findings.push({
+          type: 'INFRASTRUCTURE',
+          severity: 'CRITICAL',
+          title: 'Anonymizing Tor / Proxy Relay Origin',
+          source: 'Infrastructure',
+          observed: `Origin infrastructure: ${publicOriginHop.ip} (${geo?.org || geo?.isp || 'Tor Exit Node'})`,
+          impact: 'Sender routed transmission through an anonymized proxy network to obfuscate origin infrastructure. IP geolocation represents observed infrastructure and does not establish the physical location or identity of the sender.',
+        });
+      } else {
+        findings.push({
+          type: 'INFRASTRUCTURE',
+          severity: 'INFO',
+          title: 'Observed Public Infrastructure Relay',
+          source: 'Infrastructure',
+          observed: `Observed public origin relay: ${publicOriginHop.ip} [${geo?.city ? geo.city + ', ' : ''}${geo?.country || 'Unknown'}] (${geo?.asn || 'Public ASN'} ${geo?.org || ''})`,
+          impact: 'IP geolocation represents observed infrastructure and does not establish the physical location or identity of the sender.',
+        });
+      }
+    } else if (enrichedHops.some((h) => h.ip && h.isPrivate)) {
+      // All observed IPs are private/internal
+      findings.push({
+        type: 'INFRASTRUCTURE',
+        severity: 'INFO',
+        title: 'Internal / Private Infrastructure Only',
+        source: 'Infrastructure',
+        observed: `All observed hops belong to private/internal RFC 1918 or loopback address blocks.`,
+        impact: 'Geolocation unavailable — private/internal IP.',
+      });
+    } else {
+      findings.push({
+        type: 'INFRASTRUCTURE',
+        severity: 'INFO',
+        title: 'No Routable IPs Found',
+        source: 'Infrastructure',
+        observed: 'No routable IP addresses detected in transport headers.',
+        impact: 'No routable IPs found.',
+      });
+    }
+
+    // Mark Hop 1 as transmission origin (chronological beginning)
+    if (enrichedHops.length > 0) {
+      enrichedHops[0].isOrigin = true;
+    }
+
+    // 3. Compute Pipeline Diagnostic Telemetry
+    const totalHeaders = rawHops.filter((h) => !h.from?.includes('Client MUA') && !h.from?.includes('SPF Designated')).length;
+    const ipsExtracted = rawHops.filter((h) => Boolean(h.ip)).length;
+    const publicIps = enrichedHops.filter((h) => h.ip && !h.isPrivate).length;
+    const privateIps = enrichedHops.filter((h) => h.ip && h.isPrivate).length;
+    const ipsSentToGeoIp = enrichedHops.filter((h) => h.ip && !h.isPrivate && h.geo?.source !== 'sqlite_cache' && h.geo?.source !== 'rfc_boundary_filter').length;
+    const geoIpResponses = enrichedHops.filter((h) => h.geo?.lookupStatus === 'resolved').length;
+    const failedLookups = enrichedHops.filter((h) => h.ip && !h.isPrivate && h.geo?.lookupStatus !== 'resolved').length;
+
+    const diagnostic: GeoPipelineDiagnostic = {
+      receivedHeadersFound: totalHeaders,
+      ipsExtracted,
+      publicIps,
+      privateIps,
+      ipsSentToGeoIp,
+      geoIpResponses,
+      failedLookups,
+      routeHops: enrichedHops.length,
+      observedPublicOriginRelay: publicOriginHop
+        ? `${publicOriginHop.ip} (${publicOriginHop.geo?.city ? publicOriginHop.geo.city + ', ' : ''}${publicOriginHop.geo?.country || 'Unknown'} - ${publicOriginHop.geo?.asn || ''} ${publicOriginHop.geo?.org || ''})`
+        : undefined,
+    };
+
+    // Diagnostic console output for analyzed message
+    console.log(`
+==================== [MAILTRACE GEO PIPELINE DIAGNOSTIC] ====================
+Received headers found:        ${diagnostic.receivedHeadersFound}
+IPs extracted:                 ${diagnostic.ipsExtracted}
+Public IPs:                    ${diagnostic.publicIps}
+Private IPs:                   ${diagnostic.privateIps}
+IPs sent to GeoIP:             ${diagnostic.ipsSentToGeoIp}
+GeoIP responses:               ${diagnostic.geoIpResponses}
+Failed lookups:                ${diagnostic.failedLookups}
+Route hops:                    ${diagnostic.routeHops}
+Observed public origin relay:  ${diagnostic.observedPublicOriginRelay || 'None (Private or Unrouted)'}
+=============================================================================
+    `);
+
+    return {
+      hops: enrichedHops,
+      findings,
+      diagnostic,
+      observedOriginRelay: publicOriginHop,
+    };
   }
 }

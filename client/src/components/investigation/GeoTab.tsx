@@ -16,10 +16,19 @@ interface GeoTabProps {
 }
 
 export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
-  const { hops } = caseData;
-  const originHop = hops.length > 0 ? hops[hops.length - 1] : undefined;
-  const isPrivate = originHop?.isPrivate;
+  const { hops, observedOriginRelay } = caseData;
+
+  // Prioritize the earliest trustworthy public relay identified by the backend analyzer
+  const originHop =
+    observedOriginRelay ||
+    hops.find((h) => h.isPublicOriginRelay) ||
+    hops.find((h) => h.ip && !h.isPrivate) ||
+    hops[0] ||
+    undefined;
+
+  const isPrivate = Boolean(originHop?.isPrivate);
   const geo = originHop?.geo;
+  const lookupStatus = geo?.lookupStatus || (isPrivate ? 'private_ip' : 'unavailable');
 
   // Convert lat/long to SVG percentages (Mercator projection approximation)
   const getCoordinates = (lat?: number, lon?: number) => {
@@ -32,6 +41,7 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
   };
 
   const coords = getCoordinates(geo?.lat, geo?.lon);
+  const hasGenuinePin = coords.valid && !isPrivate && lookupStatus === 'resolved';
 
   return (
     <div className="space-y-6">
@@ -40,7 +50,7 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
         <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
         <div className="leading-relaxed">
           <strong className="font-bold block text-sm mb-0.5">Observed Email Infrastructure & Approximate Network Location:</strong>
-          IP geolocation represents <strong>observed email infrastructure</strong> derived strictly from the technical <code className="bg-blue-100/80 px-1 py-0.5 rounded font-mono">Received:</code> email headers. It establishes an <strong>approximate network location</strong> of the transmitting relay and does <em>not</em> establish the physical location, legal identity, or device location of the sender. Threat actors frequently route email through commercial VPNs, cloud proxies, or compromised relays.
+          IP geolocation represents <strong>observed infrastructure</strong> and does <strong>not</strong> establish the physical location or identity of the sender. Transmitting relays are derived strictly from RFC 5322 <code className="bg-blue-100/80 px-1 py-0.5 rounded font-mono">Received:</code> technical headers.
         </div>
       </div>
 
@@ -49,10 +59,10 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
         <div className="flex items-center justify-between pb-4 border-b border-slate-800 text-slate-300 text-xs">
           <span className="font-semibold flex items-center gap-2">
             <Globe2 className="w-4 h-4 text-blue-400" />
-            Observed Sending Infrastructure Map
+            Observed Public Origin Relay Map
           </span>
           <span className="font-mono text-[11px] text-slate-400">
-            Source: Email technical header (Received hop #{originHop?.hopNumber || 1})
+            Source: Received hop #{originHop?.hopNumber || 1} {originHop?.isPublicOriginRelay ? '(Observed public origin relay)' : ''}
           </span>
         </div>
 
@@ -81,8 +91,8 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
             <path d="M750,330 Q840,320 830,400 Q760,420 730,370 Z" />
           </svg>
 
-          {/* Plotted Pin Marker */}
-          {coords.valid && !isPrivate && (
+          {/* Plotted Pin Marker (Only for genuine coordinates from real resolved lookups) */}
+          {hasGenuinePin && (
             <div
               className="absolute transform -translate-x-1/2 -translate-y-1/2 z-10 flex flex-col items-center group cursor-pointer"
               style={{ left: `${coords.x}%`, top: `${coords.y}%` }}
@@ -95,10 +105,39 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
             </div>
           )}
 
+          {/* Explicit Status Banners When Pin Cannot Be Genuinely Plotted */}
           {isPrivate && (
-            <div className="z-10 text-center px-4 py-3 bg-slate-900/90 border border-slate-700 rounded-lg text-slate-300 text-xs">
-              <span className="font-bold text-amber-400 block mb-1">Internal Relay Host</span>
-              Geolocation unavailable — private/internal RFC 1918 IP address.
+            <div className="z-10 text-center px-4 py-3 bg-slate-900/90 border border-slate-700 rounded-lg text-slate-300 text-xs max-w-sm">
+              <span className="font-bold text-amber-400 block mb-1">Internal / Private Infrastructure</span>
+              Geolocation unavailable — private/internal IP ({originHop?.ip || 'RFC 1918'}).
+            </div>
+          )}
+
+          {!isPrivate && lookupStatus === 'rate_limited' && (
+            <div className="z-10 text-center px-4 py-3 bg-slate-900/90 border border-amber-700/80 rounded-lg text-amber-200 text-xs max-w-sm">
+              <span className="font-bold text-amber-400 block mb-1">Rate Limit Exceeded</span>
+              GeoIP service rate limited.
+            </div>
+          )}
+
+          {!isPrivate && lookupStatus === 'timeout' && (
+            <div className="z-10 text-center px-4 py-3 bg-slate-900/90 border border-slate-700 rounded-lg text-slate-300 text-xs max-w-sm">
+              <span className="font-bold text-amber-400 block mb-1">Lookup Timed Out</span>
+              Location lookup timed out.
+            </div>
+          )}
+
+          {!isPrivate && lookupStatus === 'lookup_failed' && (
+            <div className="z-10 text-center px-4 py-3 bg-slate-900/90 border border-slate-700 rounded-lg text-slate-300 text-xs max-w-sm">
+              <span className="font-bold text-slate-400 block mb-1">Lookup Unavailable</span>
+              Location lookup unavailable.
+            </div>
+          )}
+
+          {(!originHop || !originHop.ip) && (
+            <div className="z-10 text-center px-4 py-3 bg-slate-900/90 border border-slate-700 rounded-lg text-slate-300 text-xs max-w-sm">
+              <span className="font-bold text-slate-400 block mb-1">No Transport IP</span>
+              No routable IPs found.
             </div>
           )}
         </div>
@@ -120,7 +159,7 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
               {originHop?.ip || 'Unavailable'}
             </span>
             <span className="text-[10px] text-slate-400 block mt-0.5">
-              Type: {isPrivate ? 'RFC 1918 Private' : 'Public IPv4'}
+              Type: {isPrivate ? 'RFC 1918 Private' : (originHop?.ipType || 'Public IP')}
             </span>
           </div>
 
@@ -129,10 +168,10 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
               Country & Region
             </span>
             <span className="font-bold text-slate-900 text-sm block truncate">
-              {isPrivate ? 'Internal Network' : geo?.country || 'Unknown'}
+              {isPrivate ? 'Internal Network' : (geo?.country || 'Unavailable')}
             </span>
             <span className="text-[10px] text-slate-400 block mt-0.5">
-              Region: {geo?.region || 'N/A'}
+              Region: {isPrivate ? 'Internal Subnet' : (geo?.region || 'N/A')}
             </span>
           </div>
 
@@ -141,10 +180,10 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
               City / Metropolitan
             </span>
             <span className="font-bold text-slate-900 text-sm block truncate">
-              {isPrivate ? 'Private Intranet' : geo?.city || 'Unresolved'}
+              {isPrivate ? 'Private Intranet' : (geo?.city || 'Unresolved')}
             </span>
             <span className="text-[10px] text-slate-400 block mt-0.5">
-              Coordinates: {geo?.lat !== undefined ? `${geo.lat.toFixed(4)}°, ${geo.lon?.toFixed(4)}°` : 'N/A'}
+              Coordinates: {hasGenuinePin && geo?.lat !== undefined ? `${geo.lat.toFixed(4)}°, ${geo.lon?.toFixed(4)}°` : 'N/A'}
             </span>
           </div>
 
@@ -153,10 +192,10 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
               ASN & Internet Service Provider
             </span>
             <span className="font-mono font-bold text-slate-900 text-sm block">
-              {geo?.asn || 'Unassigned'}
+              {geo?.asn || (isPrivate ? 'RFC1918' : 'Unassigned')}
             </span>
             <span className="text-[10px] text-slate-400 block mt-0.5 truncate" title={geo?.org || geo?.isp}>
-              {geo?.org || geo?.isp || 'Internal Enterprise Cluster'}
+              {geo?.org || geo?.isp || (isPrivate ? 'Internal Enterprise Cluster' : 'Unavailable')}
             </span>
           </div>
         </div>
@@ -166,7 +205,7 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
             Telemetry Source: <strong className="font-mono text-slate-700">Received:</strong> header hop sequence
           </span>
           <span className="font-medium text-slate-600">
-            Resolution Confidence: {coords.valid ? '85% (Autonomous System level)' : 'N/A'}
+            Lookup Status: <strong className="font-semibold text-slate-800">{geo?.statusMessage || (lookupStatus === 'resolved' ? 'Resolved' : lookupStatus === 'private_ip' ? 'Private / Internal IP' : 'Unavailable')}</strong>
           </span>
         </div>
       </div>

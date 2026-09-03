@@ -31,14 +31,14 @@ export const RouteTab: React.FC<RouteTabProps> = ({ caseData }) => {
               Reconstructed in chronological order from transmission origin to destination delivery mail exchanger.
             </p>
           </div>
-          <span className="text-xs font-mono text-slate-400 bg-slate-50 px-3 py-1 rounded border border-slate-200 self-start sm:self-auto">
-            Origin: Hop #{hops.length > 0 ? hops.length : 1}
+          <span className="text-xs font-mono text-slate-500 bg-slate-50 px-3 py-1 rounded border border-slate-200 self-start sm:self-auto">
+            Public Origin Relay: Hop #{hops.find((h) => h.isPublicOriginRelay)?.hopNumber || 1}
           </span>
         </div>
 
         {hops.length === 0 ? (
           <div className="py-12 text-center text-slate-400 text-xs">
-            No RFC 822 Received hop headers were found in this message.
+            No RFC 822 / RFC 5322 Received hop headers were found in this message.
           </div>
         ) : (
           <div className="mt-8 relative pl-6 sm:pl-8 space-y-8">
@@ -46,7 +46,9 @@ export const RouteTab: React.FC<RouteTabProps> = ({ caseData }) => {
             <div className="absolute left-[19px] sm:left-[27px] top-6 bottom-6 w-0.5 bg-blue-200" />
 
             {hops.map((hop, idx) => {
-              const isOrigin = idx === hops.length - 1;
+              const isFirstHop = idx === 0;
+              const isPublicOrigin = Boolean(hop.isPublicOriginRelay);
+              const isFinalMx = idx === hops.length - 1 && hops.length > 1;
               const isTor = hop.geo?.org?.toLowerCase().includes('tor') || hop.geo?.org?.toLowerCase().includes('relay');
 
               return (
@@ -54,8 +56,10 @@ export const RouteTab: React.FC<RouteTabProps> = ({ caseData }) => {
                   {/* Timeline Bullet Node */}
                   <div
                     className={`absolute -left-6 sm:-left-8 top-1.5 w-6 h-6 rounded-full border-2 flex items-center justify-center text-[10px] font-bold z-10 transition-transform ${
-                      isOrigin
-                        ? 'bg-red-600 border-red-200 text-white shadow-md shadow-red-500/20 ring-4 ring-red-50'
+                      isPublicOrigin
+                        ? 'bg-blue-600 border-blue-200 text-white shadow-md shadow-blue-500/20 ring-4 ring-blue-50'
+                        : isFirstHop
+                        ? 'bg-slate-800 border-slate-200 text-white shadow-sm'
                         : 'bg-white border-blue-600 text-blue-600'
                     }`}
                   >
@@ -65,19 +69,29 @@ export const RouteTab: React.FC<RouteTabProps> = ({ caseData }) => {
                   {/* Hop Card */}
                   <div
                     className={`p-5 rounded-xl border transition-all ${
-                      isOrigin
-                        ? 'bg-gradient-to-r from-red-50/40 via-white to-white border-red-200 shadow-sm'
+                      isPublicOrigin
+                        ? 'bg-gradient-to-r from-blue-50/40 via-white to-white border-blue-300 shadow-sm ring-1 ring-blue-100'
                         : 'bg-white border-slate-200 shadow-sm hover:border-slate-300'
                     }`}
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-100">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-bold text-xs text-slate-900 font-mono">
                           Hop #{hop.hopNumber}
                         </span>
-                        {isOrigin && (
-                          <span className="px-2 py-0.5 rounded text-[10px] font-extrabold tracking-wider bg-red-600 text-white uppercase">
-                            Originating Server
+                        {isPublicOrigin && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-extrabold tracking-wider bg-blue-600 text-white uppercase">
+                            Observed Public Origin Relay
+                          </span>
+                        )}
+                        {isFirstHop && !isPublicOrigin && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-slate-800 text-white uppercase">
+                            Initial Transmission Hop
+                          </span>
+                        )}
+                        {isFinalMx && (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-slate-600 text-white uppercase">
+                            Destination MX Relay
                           </span>
                         )}
                         {hop.isPrivate && (

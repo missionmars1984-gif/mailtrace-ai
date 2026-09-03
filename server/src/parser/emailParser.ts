@@ -8,6 +8,7 @@ import type {
   ParsedAttachment,
 } from '../types/index.js';
 import { ModelE_AttachmentModel } from '../models/attachmentModel.js';
+import { GeoLocationProvider } from '../services/geoLocationProvider.js';
 
 export interface EmailParseResult {
   from: EmailAddressInfo;
@@ -109,7 +110,7 @@ export class EmailParser {
     const auth = this.extractAuthResults(parsed);
 
     // 10. Received Route Hops (with X-Originating-IP and SPF IP fallback)
-    const hops = this.extractReceivedHops(parsed);
+    const hops = this.extractReceivedHops(parsed, rawSource);
 
     // 11. Attachments & SHA-256
     const attachments = (parsed.attachments || []).map((att) => {
@@ -322,36 +323,80 @@ export class EmailParser {
     };
   }
 
-  private static extractReceivedHops(parsed: ParsedMail): RouteHop[] {
-    const receivedHeader = parsed.headers.get('received');
-    const hops: RouteHop[] = [];
-
+  private static extractReceivedHops(parsed: ParsedMail, rawSource?: string | Buffer): RouteHop[] {
     const stringList: string[] = [];
-    if (receivedHeader) {
-      const rawList = Array.isArray(receivedHeader) ? receivedHeader : [receivedHeader];
-      for (const item of rawList) {
-        if (typeof item === 'string') {
-          stringList.push(item);
-        } else if (item && typeof item === 'object' && 'value' in item) {
-          stringList.push((item as any).value || '');
+
+    // 1. Inspect headerLines if available from mailparser (most accurate RFC preservation)
+    const headerLines = (parsed as any).headerLines;
+    if (Array.isArray(headerLines)) {
+      for (const hl of headerLines) {
+        if (hl && typeof hl.key === 'string' && hl.key.toLowerCase() === 'received' && typeof hl.line === 'string') {
+          const content = hl.line.replace(/^received:\s*/i, '').trim();
+          if (content) {
+            stringList.push(content);
+          }
+        }
+      }
+    }
+
+    // 2. Fallback to parsed.headers.get('received') if headerLines was empty
+    if (stringList.length === 0) {
+      const receivedHeader = parsed.headers.get('received');
+      if (receivedHeader) {
+        const rawList = Array.isArray(receivedHeader) ? receivedHeader : [receivedHeader];
+        for (const item of rawList) {
+          let val = '';
+          if (typeof item === 'string') {
+            val = item.trim();
+          } else if (item && typeof item === 'object') {
+            val = ((item as any).value || (item as any).text || '').trim();
+          }
+          if (val) {
+            stringList.push(val);
+          }
+        }
+      }
+    }
+
+    // 3. Fallback regex scan of raw message headers block if still empty
+    if (stringList.length === 0 && rawSource) {
+      const rawText = typeof rawSource === 'string' ? rawSource : rawSource.toString('utf-8');
+      const headerSection = rawText.split(/\r?\n\r?\n/)[0] || '';
+      const rawRegex = /^received:\s*([\s\S]*?)(?=\r?\n[^\t\s]|$)/gim;
+      let match: RegExpExecArray | null;
+      while ((match = rawRegex.exec(headerSection)) !== null) {
+        const cleaned = match[1].replace(/\r?\n[\t\s]+/g, ' ').trim();
+        if (cleaned) {
+          stringList.push(cleaned);
         }
       }
     }
 
     // Process Received hops in chronological order (oldest to newest = reverse of header list)
     const reversed = [...stringList].reverse();
+    const hops: RouteHop[] = [];
 
     for (let i = 0; i < reversed.length; i++) {
-      const hopText = reversed[i];
-      const ipMatch = hopText.match(/\[(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\]/) || hopText.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
-      const fromMatch = hopText.match(/from\s+([^\s;()]+)/i);
+      const hopText = reversed[i].replace(/\r?\n[\t\s]+/g, ' ').trim();
+      const ip = this.extractPrimaryIpFromHop(hopText);
+      const fromMatch = hopText.match(/from\s+([^\s;()]+(?:\s*\([^)]+\))?)/i);
       const byMatch = hopText.match(/by\s+([^\s;()]+)/i);
       const dateMatch = hopText.match(/;\s*([^;]+)$/);
 
-      const ip = ipMatch ? ipMatch[1] : undefined;
-      const from = fromMatch ? fromMatch[1] : undefined;
-      const by = byMatch ? byMatch[1] : undefined;
-      const timestamp = dateMatch ? new Date(dateMatch[1].trim()).toISOString() : undefined;
+      let from = fromMatch ? fromMatch[1].trim() : undefined;
+      let by = byMatch ? byMatch[1].trim() : undefined;
+      let timestamp: string | undefined = undefined;
+
+      if (dateMatch) {
+        try {
+          const parsedDate = new Date(dateMatch[1].trim());
+          if (!isNaN(parsedDate.getTime())) {
+            timestamp = parsedDate.toISOString();
+          }
+        } catch {}
+      }
+
+      const classification = ip ? GeoLocationProvider.isPrivateOrReserved(ip) : undefined;
 
       hops.push({
         hopNumber: i + 1,
@@ -359,6 +404,9 @@ export class EmailParser {
         by,
         ip,
         timestamp,
+        isPrivate: classification ? classification.isPrivate : undefined,
+        ipType: classification ? classification.type : undefined,
+        rawHopText: hopText,
       });
     }
 
@@ -366,19 +414,25 @@ export class EmailParser {
     const xOriginatingIp = parsed.headers.get('x-originating-ip') || parsed.headers.get('x-sender-ip') || parsed.headers.get('x-forwarded-for');
     if (xOriginatingIp) {
       const headerStr = typeof xOriginatingIp === 'string' ? xOriginatingIp : JSON.stringify(xOriginatingIp);
-      const match = headerStr.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
-      if (match && match[1]) {
-        const foundIp = match[1];
-        // If not already the origin IP, append as client origin hop
+      const extracted = this.extractAllIpsFromText(headerStr);
+      if (extracted.length > 0) {
+        const foundIp = extracted[0];
         const alreadyHasIp = hops.some(h => h.ip === foundIp);
         if (!alreadyHasIp) {
-          hops.push({
-            hopNumber: hops.length + 1,
+          const classification = GeoLocationProvider.isPrivateOrReserved(foundIp);
+          // Prepend as earliest client hop (Hop 1) in chronological sequence
+          hops.unshift({
+            hopNumber: 1,
             from: 'Client MUA / Webmail Interface',
             by: 'Mail Ingestion Relay',
             ip: foundIp,
-            timestamp: hops[hops.length - 1]?.timestamp || new Date().toISOString(),
+            timestamp: hops[0]?.timestamp || new Date().toISOString(),
+            isPrivate: classification.isPrivate,
+            ipType: classification.type,
+            rawHopText: `X-Originating-IP: ${foundIp}`,
           });
+          // Renumber subsequent hops
+          hops.forEach((h, idx) => { h.hopNumber = idx + 1; });
         }
       }
     }
@@ -386,20 +440,85 @@ export class EmailParser {
     // Check Authentication-Results or Received-SPF if no IPs found yet
     if (hops.length === 0 || !hops.some(h => h.ip)) {
       const authRaw = String(parsed.headers.get('authentication-results') || '') + ' ' + String(parsed.headers.get('received-spf') || '');
-      const ipMatch = authRaw.match(/designates\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/i) ||
-                      authRaw.match(/client-ip=(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/i) ||
-                      authRaw.match(/(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/);
-      if (ipMatch && ipMatch[1]) {
+      const extracted = this.extractAllIpsFromText(authRaw);
+      if (extracted.length > 0) {
+        const ip = extracted[0];
+        const classification = GeoLocationProvider.isPrivateOrReserved(ip);
         hops.push({
           hopNumber: hops.length + 1,
           from: 'SPF Designated Relay',
           by: 'Inbound Gateway',
-          ip: ipMatch[1],
+          ip,
           timestamp: new Date().toISOString(),
+          isPrivate: classification.isPrivate,
+          ipType: classification.type,
+          rawHopText: authRaw,
         });
       }
     }
 
     return hops;
+  }
+
+  /**
+   * Extracts the primary IP from an individual Received hop string.
+   * Prioritizes IPs located in the transmitting `from` clause.
+   */
+  private static extractPrimaryIpFromHop(hopText: string): string | undefined {
+    // 1. Check bracketed IPs first: [209.85.220.41] or [IPv6:2001:db8::1]
+    const bracketedMatch = hopText.match(/\[(?:ipv6:)?([0-9a-fA-F:.]+)\]/i);
+    if (bracketedMatch && bracketedMatch[1]) {
+      const cand = bracketedMatch[1].trim();
+      if (GeoLocationProvider.isPrivateOrReserved(cand).type !== 'INVALID') {
+        return cand;
+      }
+    }
+
+    // 2. Check parenthesized comments: (mail.example.com 203.0.113.10) or (203.0.113.10)
+    const parenMatch = hopText.match(/\((?:[^)]*?\s+)?(?:\[(?:ipv6:)?([0-9a-fA-F:.]+)\]|(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}))\)/i);
+    if (parenMatch) {
+      const cand = (parenMatch[1] || parenMatch[2]).trim();
+      if (GeoLocationProvider.isPrivateOrReserved(cand).type !== 'INVALID') {
+        return cand;
+      }
+    }
+
+    // 3. Extract all valid IPs and prioritize public ones over private cluster addresses
+    const allIps = this.extractAllIpsFromText(hopText);
+    if (allIps.length > 0) {
+      const publicIp = allIps.find(ip => !GeoLocationProvider.isPrivateOrReserved(ip).isPrivate);
+      return publicIp || allIps[0];
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Extracts and validates all IPv4 and IPv6 addresses from an arbitrary string.
+   */
+  private static extractAllIpsFromText(text: string): string[] {
+    const results: string[] = [];
+    if (!text) return results;
+
+    // IPv4 regex
+    const ipv4Regex = /\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/g;
+    let match: RegExpExecArray | null;
+    while ((match = ipv4Regex.exec(text)) !== null) {
+      const ip = match[1];
+      if (GeoLocationProvider.isPrivateOrReserved(ip).type !== 'INVALID') {
+        if (!results.includes(ip)) results.push(ip);
+      }
+    }
+
+    // IPv6 regex
+    const ipv6Regex = /(?:\[(?:ipv6:)?([0-9a-fA-F:]{3,39})\]|\b([0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4}){2,7}|::1)\b)/gi;
+    while ((match = ipv6Regex.exec(text)) !== null) {
+      const ip = (match[1] || match[2]).trim();
+      if (ip && ip.includes(':') && GeoLocationProvider.isPrivateOrReserved(ip).type !== 'INVALID') {
+        if (!results.includes(ip)) results.push(ip);
+      }
+    }
+
+    return results;
   }
 }

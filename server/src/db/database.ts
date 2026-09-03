@@ -69,6 +69,8 @@ db.exec(`
     asn TEXT,
     is_private INTEGER NOT NULL DEFAULT 0,
     ip_type TEXT NOT NULL DEFAULT 'PUBLIC',
+    lookup_status TEXT NOT NULL DEFAULT 'resolved',
+    status_message TEXT,
     cached_at TEXT NOT NULL
   );
 
@@ -104,6 +106,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_indicators_val ON indicators(value);
   CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(generated_at DESC);
 `);
+
+try {
+  db.exec(`ALTER TABLE geo_locations ADD COLUMN lookup_status TEXT DEFAULT 'resolved'`);
+} catch {}
+try {
+  db.exec(`ALTER TABLE geo_locations ADD COLUMN status_message TEXT`);
+} catch {}
 
 export class DatabaseService {
   /**
@@ -218,6 +227,80 @@ export class DatabaseService {
       return JSON.parse(row.data_json) as CaseRecord;
     } catch {
       return null;
+    }
+  }
+
+  static getCachedGeoLocation(ip: string): GeoLocationData | null {
+    if (!ip) return null;
+    try {
+      const stmt = db.prepare(`SELECT * FROM geo_locations WHERE ip = ?`);
+      const row = stmt.get(ip.trim()) as any;
+      if (!row) return null;
+
+      // TTL of 7 days for public cached coordinates
+      const cachedAt = new Date(row.cached_at).getTime();
+      if (Date.now() - cachedAt > 7 * 24 * 60 * 60 * 1000) {
+        return null;
+      }
+
+      return {
+        ip: row.ip,
+        country: row.country,
+        countryCode: row.country_code || undefined,
+        region: row.region || undefined,
+        city: row.city || undefined,
+        lat: typeof row.lat === 'number' ? row.lat : undefined,
+        lon: typeof row.lon === 'number' ? row.lon : undefined,
+        timezone: row.timezone || undefined,
+        isp: row.isp || undefined,
+        org: row.org || undefined,
+        asn: row.asn || undefined,
+        isPrivate: Boolean(row.is_private),
+        ipType: row.ip_type,
+        lookupStatus: row.lookup_status || 'resolved',
+        statusMessage: row.status_message || undefined,
+        source: 'sqlite_cache',
+      };
+    } catch (err) {
+      console.warn(`[DatabaseService] Error reading geo cache for ${ip}:`, err);
+      return null;
+    }
+  }
+
+  static cacheGeoLocation(ip: string, geo: GeoLocationData): void {
+    if (!ip) return;
+    try {
+      const stmt = db.prepare(`
+        INSERT OR REPLACE INTO geo_locations (
+          ip, country, country_code, region, city,
+          lat, lon, timezone, isp, org,
+          asn, is_private, ip_type, lookup_status, status_message, cached_at
+        ) VALUES (
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?
+        )
+      `);
+      stmt.run(
+        ip.trim(),
+        geo.country || 'Location Unresolved',
+        geo.countryCode || null,
+        geo.region || null,
+        geo.city || null,
+        typeof geo.lat === 'number' ? geo.lat : null,
+        typeof geo.lon === 'number' ? geo.lon : null,
+        geo.timezone || null,
+        geo.isp || null,
+        geo.org || null,
+        geo.asn || null,
+        geo.isPrivate ? 1 : 0,
+        geo.ipType || 'PUBLIC',
+        geo.lookupStatus || 'resolved',
+        geo.statusMessage || null,
+        new Date().toISOString()
+      );
+    } catch (err) {
+      console.warn(`[DatabaseService] cacheGeoLocation error for ${ip}:`, err);
     }
   }
 
@@ -406,78 +489,6 @@ export class DatabaseService {
       count: matchedCases.length,
       cases: matchedCases,
     };
-  }
-
-  /**
-   * Real GeoIP cache lookup and write.
-   */
-  static getCachedGeoLocation(ip: string): GeoLocationData | null {
-    const stmt = db.prepare(`
-      SELECT country, country_code, region, city, lat, lon, timezone, isp, org, asn, is_private, ip_type
-      FROM geo_locations
-      WHERE ip = ?
-      LIMIT 1
-    `);
-    const row = stmt.get(ip) as {
-      country: string;
-      country_code?: string;
-      region?: string;
-      city?: string;
-      lat?: number;
-      lon?: number;
-      timezone?: string;
-      isp?: string;
-      org?: string;
-      asn?: string;
-      is_private: number;
-      ip_type: string;
-    } | undefined;
-
-    if (!row) return null;
-
-    return {
-      country: row.country,
-      countryCode: row.country_code,
-      region: row.region,
-      city: row.city,
-      lat: row.lat !== null && row.lat !== undefined ? row.lat : undefined,
-      lon: row.lon !== null && row.lon !== undefined ? row.lon : undefined,
-      timezone: row.timezone,
-      isp: row.isp,
-      org: row.org,
-      asn: row.asn,
-      isPrivate: row.is_private === 1,
-      ipType: row.ip_type as GeoLocationData['ipType'],
-    };
-  }
-
-  static cacheGeoLocation(ip: string, geo: GeoLocationData): void {
-    const stmt = db.prepare(`
-      INSERT OR REPLACE INTO geo_locations (
-        ip, country, country_code, region, city, lat, lon, timezone,
-        isp, org, asn, is_private, ip_type, cached_at
-      ) VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?,
-        ?, ?, ?, ?, ?, ?
-      )
-    `);
-
-    stmt.run(
-      ip,
-      geo.country,
-      geo.countryCode || null,
-      geo.region || null,
-      geo.city || null,
-      geo.lat !== undefined ? geo.lat : null,
-      geo.lon !== undefined ? geo.lon : null,
-      geo.timezone || null,
-      geo.isp || null,
-      geo.org || null,
-      geo.asn || null,
-      geo.isPrivate ? 1 : 0,
-      geo.ipType || 'PUBLIC',
-      new Date().toISOString()
-    );
   }
 
   /**

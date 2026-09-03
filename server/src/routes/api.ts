@@ -114,7 +114,7 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
   });
 
   // 11. Route & Infrastructure enrichment with real GeoIP
-  const { hops, findings: infraFindings } = await InfrastructureAnalyzer.enrichHops(parsed.hops);
+  const { hops, findings: infraFindings, diagnostic: geoDiagnostic, observedOriginRelay } = await InfrastructureAnalyzer.enrichHops(parsed.hops);
 
   // Consolidate findings across all independent models
   const findings: SecurityFinding[] = [
@@ -370,6 +370,8 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
     reportHash,
     rawEmail: typeof rawEmailContent === 'string' ? rawEmailContent : rawEmailContent.toString('utf-8'),
     rawHeaders: parsed.rawHeaders,
+    observedOriginRelay,
+    geoDiagnostic,
   };
 
   // 19. Persist to SQLite
@@ -384,7 +386,7 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
     classification: caseRecord.classification,
     riskScore: caseRecord.riskScore,
     riskLevel: caseRecord.riskLevel,
-    originIp: sendingIp,
+    originIp: observedOriginRelay?.ip || hops[0]?.ip || 'Unknown',
     timestamp: caseRecord.createdAt,
   });
 

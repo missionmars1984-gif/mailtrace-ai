@@ -31,7 +31,11 @@ export interface AuthenticationResults {
   raw?: string;
 }
 
+export type GeoLookupStatus = 'resolved' | 'unavailable' | 'private_ip' | 'lookup_failed' | 'rate_limited' | 'timeout';
+export type IpClassificationType = 'PUBLIC' | 'PRIVATE' | 'LOOPBACK' | 'LINK_LOCAL' | 'RESERVED' | 'INVALID';
+
 export interface GeoLocationData {
+  ip?: string;
   country: string;
   countryCode?: string;
   region?: string;
@@ -43,7 +47,10 @@ export interface GeoLocationData {
   org?: string;
   isp?: string;
   isPrivate?: boolean;
-  ipType?: 'PUBLIC' | 'PRIVATE' | 'LOOPBACK' | 'RESERVED';
+  ipType?: IpClassificationType;
+  lookupStatus?: GeoLookupStatus;
+  statusMessage?: string;
+  source?: string;
 }
 
 export interface RouteHop {
@@ -55,7 +62,22 @@ export interface RouteHop {
   delayMs?: number;
   isPrivate?: boolean;
   isOrigin?: boolean;
+  isPublicOriginRelay?: boolean;
+  ipType?: IpClassificationType;
+  rawHopText?: string;
   geo?: GeoLocationData;
+}
+
+export interface GeoPipelineDiagnostic {
+  receivedHeadersFound: number;
+  ipsExtracted: number;
+  publicIps: number;
+  privateIps: number;
+  ipsSentToGeoIp: number;
+  geoIpResponses: number;
+  failedLookups: number;
+  routeHops: number;
+  observedPublicOriginRelay?: string;
 }
 
 export interface ParsedAttachment {
@@ -266,6 +288,8 @@ export interface CaseRecord {
   reportHash: string;
   rawEmail?: string;
   rawHeaders?: Record<string, string | string[]>;
+  observedOriginRelay?: RouteHop;
+  geoDiagnostic?: GeoPipelineDiagnostic;
 }
 
 export interface DashboardStats {

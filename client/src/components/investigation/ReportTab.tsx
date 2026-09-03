@@ -40,6 +40,13 @@ export const ReportTab: React.FC<ReportTabProps> = ({ caseData }) => {
     reportHash,
   } = caseData;
 
+  const originRelay =
+    caseData.observedOriginRelay ||
+    hops.find((h) => h.isPublicOriginRelay) ||
+    hops.find((h) => h.ip && !h.isPrivate) ||
+    hops[0] ||
+    undefined;
+
   const handlePrint = () => {
     window.print();
   };
@@ -58,44 +65,43 @@ export const ReportTab: React.FC<ReportTabProps> = ({ caseData }) => {
   return (
     <div className="space-y-6">
       {/* Print / Export Action Bar (Hidden on print) */}
-      <div className="no-print bg-white p-4 rounded-xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
-        <div>
-          <h4 className="text-sm font-bold text-slate-900">Forensic Investigation Report</h4>
-          <p className="text-xs text-slate-500">Official technical dossier prepared for Incident Response & Compliance.</p>
+      <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 print:hidden">
+        <div className="flex items-center space-x-2 text-xs text-slate-600">
+          <FileText className="w-4 h-4 text-blue-600" />
+          <span className="font-semibold text-slate-900">Incident Dossier Ready</span>
+          <span>• Certified forensic record #{caseNumber}</span>
         </div>
-        <div className="flex items-center space-x-2">
+        <div className="flex items-center space-x-3">
           <button
             onClick={handleDownloadJson}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition-colors"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-semibold shadow-sm transition-colors"
           >
-            <Download className="w-4 h-4" />
-            Download JSON
+            <Download className="w-3.5 h-3.5 text-slate-500" />
+            <span>Export JSON</span>
           </button>
           <button
             onClick={handlePrint}
-            className="inline-flex items-center gap-1.5 px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
+            className="flex items-center space-x-1.5 px-4 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold shadow-sm transition-colors"
           >
-            <Printer className="w-4 h-4" />
-            Print / Save PDF
+            <Printer className="w-3.5 h-3.5" />
+            <span>Print Forensic Report</span>
           </button>
         </div>
       </div>
 
-      {/* Printable Report Document Sheet */}
-      <div className="report-page bg-white p-8 sm:p-12 rounded-xl border border-slate-200 shadow-sm space-y-8 text-slate-900">
-        {/* Document Header */}
+      {/* Printable Forensic Report Container */}
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-8 sm:p-12 space-y-8 print:shadow-none print:border-none print:p-0">
+        {/* Dossier Header */}
         <div className="flex flex-col sm:flex-row sm:items-start justify-between border-b-2 border-slate-900 pb-6 gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xl font-black tracking-wider text-slate-900">
-                MAILTRACE AI FORENSICS
-              </span>
-              <span className="text-xs px-2 py-0.5 rounded bg-blue-600 text-white font-mono font-bold">
-                INCIDENT DOSSIER
-              </span>
+          <div className="space-y-1">
+            <div className="flex items-center space-x-2">
+              <ShieldCheck className="w-6 h-6 text-blue-600" />
+              <h2 className="text-xl font-black tracking-tight text-slate-900">
+                MAILTRACE AI FORENSIC INCIDENT DOSSIER
+              </h2>
             </div>
-            <p className="text-xs text-slate-500 mt-1">
-              Automated Forensic Email Threat Intelligence Platform | SIH 2026
+            <p className="text-xs text-slate-500 uppercase tracking-widest font-mono">
+              CONFIDENTIAL SECURITY OPERATIONS CENTER BRIEFING
             </p>
           </div>
 
@@ -191,11 +197,22 @@ export const ReportTab: React.FC<ReportTabProps> = ({ caseData }) => {
               <strong className="text-[10px] uppercase font-bold text-slate-400 block mb-1">Observed Infrastructure</strong>
               <p className="font-mono"><strong>Return-Path:</strong> {identityAnalysis.observed.returnPath}</p>
               <p className="font-mono mt-0.5"><strong>Reply-To:</strong> {identityAnalysis.observed.replyTo}</p>
-              <p className="font-mono mt-0.5"><strong>Origin Relay:</strong> {identityAnalysis.observed.sendingIp}</p>
+              <p className="font-mono mt-0.5"><strong>Origin Relay:</strong> {originRelay?.ip || identityAnalysis.observed.sendingIp || '(None detected)'}</p>
+              <p className="font-mono mt-0.5">
+                <strong>Relay Infrastructure:</strong>{' '}
+                {originRelay?.geo?.country
+                  ? `${originRelay.geo.city ? originRelay.geo.city + ', ' : ''}${originRelay.geo.country} (${originRelay.geo.asn || 'Public ASN'}${originRelay.geo.org ? ' ' + originRelay.geo.org : ''})`
+                  : originRelay?.isPrivate
+                  ? 'Internal / RFC 1918 Private'
+                  : 'Unresolved'}
+              </p>
             </div>
           </div>
           <p className="text-xs text-slate-700 bg-slate-50 p-3 rounded border border-slate-200">
             <strong>Identity Consistency Rating:</strong> <span className="font-bold">{identityAnalysis.consistency}</span>. {identityAnalysis.reasons.join(' ')}
+          </p>
+          <p className="text-[11px] text-slate-500 italic bg-blue-50/50 p-2.5 rounded border border-blue-100">
+            <strong>Forensic Disclaimer:</strong> IP geolocation represents observed infrastructure and does not establish the physical location or identity of the sender.
           </p>
         </section>
 
