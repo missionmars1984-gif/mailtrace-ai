@@ -87,8 +87,8 @@ export const Header: React.FC<HeaderProps> = ({ onRefresh }) => {
 
   return (
     <header className="h-[68px] bg-white border-b border-[#E5E9F2] px-6 sm:px-8 flex items-center sticky top-0 z-20 shadow-[0_1px_3px_rgba(11,31,58,0.02)]">
-      {/* 1. [PAGE TITLE AREA] - Fixed stable width so Search Area starts at identical position on all routes */}
-      <div className="w-[170px] sm:w-[190px] lg:w-[220px] flex-shrink-0 flex items-center pr-3 sm:pr-4">
+      {/* 1. [PAGE TITLE] - Reserved fixed container so Search starts at identical offset on every route */}
+      <div className="w-[180px] sm:w-[200px] flex-shrink-0 flex items-center pr-3 sm:pr-4">
         <h1
           className="text-xl font-bold text-[#0B1F3A] tracking-tight truncate whitespace-nowrap"
           title={getPageTitle(location.pathname)}
@@ -97,10 +97,10 @@ export const Header: React.FC<HeaderProps> = ({ onRefresh }) => {
         </h1>
       </div>
 
-      {/* 2. [SEARCH AREA] - Constant horizontal starting offset, shrinks gracefully */}
-      <div className="flex-1 max-w-md min-w-[180px] hidden md:block">
-        <form onSubmit={handleSearch} className="relative w-full">
-          <Search className="w-4 h-4 text-[#68809F] absolute left-3.5 top-3" />
+      {/* 2. [SEARCH BAR] - Fixed width, stable horizontal alignment & height on every page */}
+      <div className="w-[280px] lg:w-[320px] flex-shrink-0 hidden md:block">
+        <form onSubmit={handleSearch} className="relative w-full flex items-center">
+          <Search className="w-4 h-4 text-[#68809F] absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           <input
             type="text"
             value={searchQuery}
@@ -111,39 +111,40 @@ export const Header: React.FC<HeaderProps> = ({ onRefresh }) => {
         </form>
       </div>
 
-      {/* 3. [RIGHT CONTROLS] - Consistently aligned on the right */}
-      <div className="flex items-center space-x-3 sm:space-x-4 flex-shrink-0 ml-auto">
-        {/* System Health Status Pill */}
-        <div className="hidden sm:flex items-center">
-          {systemHealth === 'HEALTHY' && (
-            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-xs font-semibold text-emerald-800">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>System Normal</span>
-            </div>
-          )}
-          {systemHealth === 'DEGRADED' && (
-            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200/80 text-xs font-semibold text-amber-800">
-              <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-              <span>System Degraded</span>
-            </div>
-          )}
-          {systemHealth === 'UNAVAILABLE' && (
-            <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-red-50 border border-red-200/80 text-xs font-semibold text-red-800">
-              <span className="w-2 h-2 rounded-full bg-red-500" />
-              <span>Analysis Service Unavailable</span>
-            </div>
-          )}
-        </div>
+      {/* 3. [SYSTEM NORMAL] - Placed directly after Search with consistent gap */}
+      <div className="hidden sm:flex items-center flex-shrink-0 ml-3 sm:ml-4">
+        {systemHealth === 'HEALTHY' && (
+          <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/80 text-xs font-semibold text-emerald-800">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>System Normal</span>
+          </div>
+        )}
+        {systemHealth === 'DEGRADED' && (
+          <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-amber-50 border border-amber-200/80 text-xs font-semibold text-amber-800">
+            <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+            <span>System Degraded</span>
+          </div>
+        )}
+        {systemHealth === 'UNAVAILABLE' && (
+          <div className="flex items-center space-x-2 px-3 py-1.5 rounded-full bg-red-50 border border-red-200/80 text-xs font-semibold text-red-800">
+            <span className="w-2 h-2 rounded-full bg-red-500" />
+            <span>Analysis Service Unavailable</span>
+          </div>
+        )}
+      </div>
 
-        {/* Mail Exchange Button */}
-        <button
-          onClick={() => navigate('/live-monitor')}
-          className="hidden lg:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-[#EEF4FF] hover:bg-blue-100/80 text-[#246BFE] text-xs font-bold transition-colors"
-          title="Open Mail Exchange Monitor"
-        >
-          <span>Mail Exchange</span>
-          <ExternalLink className="w-3.5 h-3.5" />
-        </button>
+      {/* 4. [MAIL EXCHANGE] - Placed directly after System Normal with consistent gap */}
+      <button
+        onClick={() => navigate('/live-monitor')}
+        className="hidden lg:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-[#EEF4FF] hover:bg-blue-100/80 text-[#246BFE] text-xs font-bold transition-colors cursor-pointer flex-shrink-0 ml-3"
+        title="Open Mail Exchange Monitor"
+      >
+        <span>Mail Exchange</span>
+        <ExternalLink className="w-3.5 h-3.5" />
+      </button>
+
+      {/* 5. [RIGHT UTILITY CONTROLS] - Pushed to right margin via ml-auto */}
+      <div className="flex items-center space-x-3 sm:space-x-4 flex-shrink-0 ml-auto">
 
         {/* Refresh Icon */}
         <button
