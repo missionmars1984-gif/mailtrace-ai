@@ -746,33 +746,40 @@ apiRouter.get('/assistant/history', (req: Request, res: Response) => {
   }
 });
 
-// GET /api/live-stream - Server-Sent Events (SSE) for real-time monitoring
-apiRouter.get('/live-stream', (req: Request, res: Response) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-cache');
+// GET /api/live-stream & /api/live/stream - Server-Sent Events (SSE) for real-time monitoring
+const handleLiveStreamSSE = (req: Request, res: Response) => {
+  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
   res.flushHeaders();
+
+  // 2KB comment padding to force Cloudflare / Nginx reverse proxies to flush immediately
+  res.write(':' + ' '.repeat(2048) + '\n\n');
 
   // Send initial connection acknowledgement
   res.write(`event: connected\ndata: ${JSON.stringify({ status: 'connected', time: new Date().toISOString() })}\n\n`);
 
   sseClients.push(res);
 
-  // Heartbeat ping every 15s to keep connection alive
+  // Heartbeat ping every 10s to keep connection alive through proxies & firewalls
   const pingInterval = setInterval(() => {
     try {
       res.write(`event: ping\ndata: ${JSON.stringify({ time: new Date().toISOString() })}\n\n`);
     } catch {
       clearInterval(pingInterval);
     }
-  }, 15000);
+  }, 10000);
 
   req.on('close', () => {
     clearInterval(pingInterval);
     const index = sseClients.indexOf(res);
     if (index !== -1) sseClients.splice(index, 1);
   });
-});
+};
+
+apiRouter.get('/live-stream', handleLiveStreamSSE);
+apiRouter.get('/live/stream', handleLiveStreamSSE);
 
 // POST /api/ingest/email - Ingest email and broadcast to live monitor
 apiRouter.post('/ingest/email', async (req: Request, res: Response) => {

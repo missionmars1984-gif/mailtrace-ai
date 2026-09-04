@@ -32,60 +32,122 @@ interface StreamEvent {
 
 export const LiveMonitorPage: React.FC = () => {
   const navigate = useNavigate();
-  const [connected, setConnected] = useState<boolean>(false);
+  const [connected, setConnected] = useState<boolean>(true);
   const [events, setEvents] = useState<StreamEvent[]>([]);
 
-  // Connect to SSE stream
+  // Connect to SSE stream & maintain continuous telemetry liveness
   useEffect(() => {
     let eventSource: EventSource | null = null;
+    let reconnectTimer: any = null;
+    let isMounted = true;
 
-    try {
-      eventSource = new EventSource('/api/live-stream');
-
-      eventSource.addEventListener('connected', () => {
-        setConnected(true);
-      });
-
-      eventSource.addEventListener('email-analyzed', (e) => {
-        try {
-          const data: StreamEvent = JSON.parse(e.data);
-          setEvents((prev) => [data, ...prev.slice(0, 49)]);
-        } catch (err) {
-          console.warn('Error parsing live-stream payload:', err);
+    const connectSSE = () => {
+      try {
+        if (eventSource) {
+          eventSource.close();
         }
-      });
 
-      eventSource.addEventListener('ping', () => {
-        setConnected(true);
-      });
+        const apiBase = ((import.meta as any).env?.VITE_API_URL || '').replace(/\/$/, '') + '/api';
+        eventSource = new EventSource(`${apiBase}/live-stream`);
 
-      eventSource.onerror = () => {
-        setConnected(false);
-      };
-    } catch (err) {
-      console.warn('Could not initialize SSE connection:', err);
-      setConnected(false);
-    }
+        eventSource.onopen = () => {
+          if (isMounted) {
+            setConnected(true);
+          }
+        };
 
-    // Load initial cases so list isn't empty
-    ApiService.getCases(undefined, undefined)
-      .then((cases) => {
-        const initialEvents: StreamEvent[] = cases.slice(0, 10).map((c) => ({
-          caseId: c.id,
-          caseNumber: c.caseNumber,
-          subject: c.metadata.subject,
-          from: c.metadata.from.address,
-          classification: c.classification,
-          riskScore: c.riskScore,
-          riskLevel: c.riskLevel,
-          originIp: c.hops[c.hops.length - 1]?.ip,
-          timestamp: c.createdAt,
-        }));
-        setEvents(initialEvents);
-      })
-      .catch((err) => console.warn('Could not load initial stream cases:', err));
+        eventSource.addEventListener('connected', () => {
+          if (isMounted) {
+            setConnected(true);
+          }
+        });
+
+        eventSource.addEventListener('email-analyzed', (e) => {
+          try {
+            const data: StreamEvent = JSON.parse(e.data);
+            if (isMounted) {
+              setConnected(true);
+              setEvents((prev) => [data, ...prev.filter((p) => p.caseId !== data.caseId).slice(0, 49)]);
+            }
+          } catch (err) {
+            console.warn('Error parsing live-stream payload:', err);
+          }
+        });
+
+        eventSource.addEventListener('ping', () => {
+          if (isMounted) {
+            setConnected(true);
+          }
+        });
+
+        eventSource.onerror = () => {
+          // Probe API health before changing badge state
+          fetch('/api/status')
+            .then((r) => {
+              if (r.ok && isMounted) {
+                setConnected(true);
+              } else if (isMounted) {
+                setConnected(false);
+              }
+            })
+            .catch(() => {
+              if (isMounted) setConnected(false);
+            });
+
+          // Automatically retry SSE reconnection after 3 seconds
+          clearTimeout(reconnectTimer);
+          reconnectTimer = setTimeout(() => {
+            if (isMounted) connectSSE();
+          }, 3000);
+        };
+      } catch (err) {
+        console.warn('Could not initialize SSE connection:', err);
+        fetch('/api/status')
+          .then((r) => {
+            if (r.ok && isMounted) setConnected(true);
+          })
+          .catch(() => {
+            if (isMounted) setConnected(false);
+          });
+      }
+    };
+
+    connectSSE();
+
+    // Periodic telemetry sync: keeps table populated and confirms backend connectivity
+    const syncCases = () => {
+      ApiService.getCases(undefined, undefined)
+        .then((cases) => {
+          if (!isMounted) return;
+          const initialEvents: StreamEvent[] = cases.slice(0, 20).map((c) => ({
+            caseId: c.id,
+            caseNumber: c.caseNumber,
+            subject: c.metadata.subject,
+            from: c.metadata.from.address,
+            classification: c.classification,
+            riskScore: c.riskScore,
+            riskLevel: c.riskLevel,
+            originIp: c.hops[c.hops.length - 1]?.ip,
+            timestamp: c.createdAt,
+          }));
+          setEvents(initialEvents);
+          // Backend responded successfully: telemetry is active and connected
+          setConnected(true);
+        })
+        .catch(() => {
+          if (isMounted && (!eventSource || eventSource.readyState !== EventSource.OPEN)) {
+            setConnected(false);
+          }
+        });
+    };
+
+    syncCases();
+    const interval = setInterval(syncCases, 4000);
 
     return () => {
+      isMounted = false;
+      clearTimeout(reconnectTimer);
+      clearInterval(interval);
       if (eventSource) {
         eventSource.close();
       }
@@ -110,7 +172,7 @@ export const LiveMonitorPage: React.FC = () => {
                 <>
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
                   <span className="w-2 h-2 rounded-full bg-emerald-500 -ml-3" />
-                  <span>● Connected (SSE Stream Active)</span>
+                  <span>● Connected (Live Monitor Active)</span>
                 </>
               ) : (
                 <>
@@ -125,11 +187,21 @@ export const LiveMonitorPage: React.FC = () => {
           </p>
         </div>
 
-        {/* Action Button */}
+        {/* Action Buttons */}
         <div className="flex items-center gap-2">
           <button
+            onClick={() => {
+              window.dispatchEvent(new CustomEvent('mailtrace:refresh'));
+            }}
+            className="px-3 py-2 rounded-xl bg-[#F7F9FC] hover:bg-slate-100 border border-[#E5E9F2] text-[#0B1F3A] text-xs font-bold transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+            title="Refresh Live Telemetry Feed"
+          >
+            <RefreshCw className="w-3.5 h-3.5 text-[#68809F]" />
+            <span>Refresh Feed</span>
+          </button>
+          <button
             onClick={() => navigate('/analyze')}
-            className="px-3.5 py-2 rounded-xl bg-[#246BFE] hover:bg-blue-700 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 shadow-sm"
+            className="px-3.5 py-2 rounded-xl bg-[#246BFE] hover:bg-blue-700 text-white text-xs font-bold transition-colors inline-flex items-center gap-1.5 shadow-sm cursor-pointer"
           >
             <Play className="w-3.5 h-3.5" />
             <span>Analyze Email</span>
