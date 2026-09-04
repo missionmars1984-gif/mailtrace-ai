@@ -1,5 +1,10 @@
 import type { NlpProbabilities, SecurityFinding } from '../types/index.js';
 import { GeminiClient } from '../ai/geminiClient.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { TfIdfVectorizer } from '../ml/tfidf.js';
+import { LogisticRegression, OneVsRestThreatClassifier } from '../ml/logisticRegression.js';
 
 export interface NlpAnalysisInput {
   subject: string;
@@ -16,10 +21,35 @@ export interface NlpClassificationResult {
   nlpRisk: number; // 0–100
   primaryThreats: string[];
   contextualFindings: string[];
-  modelTier: 'GEMINI_GENAI' | 'DETERMINISTIC_CONTEXTUAL_TRANSFORMER_EMULATION';
+  modelTier: 'GEMINI_GENAI' | 'TRAINED_TFIDF_LOGISTIC_REGRESSION' | 'DETERMINISTIC_CONTEXTUAL_TRANSFORMER_EMULATION';
 }
 
 export class ModelA_EmailNlpClassifier {
+  private static trainedModelLoaded = false;
+  private static trainedVectorizer: TfIdfVectorizer | null = null;
+  private static trainedBinaryClassifier: LogisticRegression | null = null;
+  private static trainedThreatClassifier: OneVsRestThreatClassifier | null = null;
+
+  private static loadTrainedModel(): boolean {
+    if (this.trainedModelLoaded) return Boolean(this.trainedBinaryClassifier);
+    this.trainedModelLoaded = true;
+    try {
+      const currentDir = path.dirname(fileURLToPath(import.meta.url));
+      const modelPath = path.resolve(currentDir, 'trainedNlpModel.json');
+      if (fs.existsSync(modelPath)) {
+        const raw = fs.readFileSync(modelPath, 'utf-8');
+        const data = JSON.parse(raw);
+        this.trainedVectorizer = TfIdfVectorizer.fromJSON(data.tfidf);
+        this.trainedBinaryClassifier = LogisticRegression.fromJSON(data.binaryClassifier);
+        this.trainedThreatClassifier = OneVsRestThreatClassifier.fromJSON(data.threatClassifier);
+        return true;
+      }
+    } catch (e) {
+      console.warn('[Model A] Failed to load trained NLP model JSON:', e);
+    }
+    return false;
+  }
+
   /**
    * Evaluates email content semantically across subject, body, sender, signature, and URL context.
    * Produces multi-label probability distributions for 8 distinct threat dimensions.
@@ -27,7 +57,7 @@ export class ModelA_EmailNlpClassifier {
   static async classify(input: NlpAnalysisInput): Promise<NlpClassificationResult> {
     const { subject, bodyText, bodyHtml, senderDisplayName, senderAddress, urlContexts, signatureText } = input;
 
-    // Check if Gemini is available for transformer-level inference
+    // 1. Check if Gemini is available for transformer-level inference
     const hasApiKey = Boolean(process.env.GEMINI_API_KEY?.trim());
 
     if (hasApiKey) {
@@ -35,12 +65,95 @@ export class ModelA_EmailNlpClassifier {
         const geminiResult = await this.classifyWithGemini(input);
         if (geminiResult) return geminiResult;
       } catch (err) {
-        console.warn('[Model A] Gemini inference failed; falling back to contextual transformer emulation:', err);
+        console.warn('[Model A] Gemini inference failed; falling back to trained ML model:', err);
       }
     }
 
-    // Deterministic contextual transformer emulation
+    // 2. Try trained TF-IDF + Logistic Regression Machine Learning Model
+    try {
+      const mlResult = this.classifyWithTrainedModel(input);
+      if (mlResult) return mlResult;
+    } catch (err) {
+      console.warn('[Model A] Trained ML model execution failed; falling back to contextual transformer emulation:', err);
+    }
+
+    // 3. Deterministic contextual transformer emulation fallback
     return this.classifyContextualEmulation(input);
+  }
+
+  /**
+   * Evaluates email using trained TF-IDF vectorizer and calibrated Logistic Regression.
+   */
+  private static classifyWithTrainedModel(input: NlpAnalysisInput): NlpClassificationResult | null {
+    if (!this.loadTrainedModel() || !this.trainedVectorizer || !this.trainedBinaryClassifier || !this.trainedThreatClassifier) {
+      return null;
+    }
+
+    const fullText = `${input.subject} ${input.bodyText} ${input.senderDisplayName}`.toLowerCase();
+    const vec = this.trainedVectorizer.transform(fullText);
+    const p_phish_ml = this.trainedBinaryClassifier.predictProbability(vec);
+    const threatSubtypeProbs = this.trainedThreatClassifier.predictProbabilities(vec);
+
+    // Run contextual rule analysis to obtain ground-truth contextual findings and safeguards
+    const contextualResult = this.classifyContextualEmulation(input);
+    const ctx = contextualResult.probabilities;
+
+    const p_cred_ml = threatSubtypeProbs['credential_harvesting'] || 0.01;
+    const p_urgency_ml = threatSubtypeProbs['urgency'] || 0.01;
+    const p_authority_ml = threatSubtypeProbs['authority_scam'] || 0.01;
+    const p_fin_ml = threatSubtypeProbs['financial_scam'] || 0.01;
+    const p_legit_ml = threatSubtypeProbs['legitimate'] || 0.50;
+
+    // Combine ML subtype probabilities with contextual detections
+    const p_phishing = Number(Math.max(ctx.phishing, p_phish_ml * 0.95).toFixed(2));
+    const p_credential_theft = Number(Math.max(ctx.credential_theft, p_cred_ml >= 0.5 ? 0.92 : 0.01).toFixed(2));
+    const p_bec = Number(Math.max(ctx.bec, p_fin_ml >= 0.5 ? 0.90 : 0.01).toFixed(2));
+    const p_social_engineering = Number(Math.max(ctx.social_engineering, (p_urgency_ml >= 0.5 || p_authority_ml >= 0.5) ? 0.88 : 0.05).toFixed(2));
+    const p_spear_phishing = ctx.spear_phishing;
+    const p_malware_delivery = ctx.malware_delivery;
+    const p_spam = ctx.spam;
+    
+    // Legitimate probability drops if malicious signals are high, or elevates if benign patterns corroborated
+    let p_legitimate = ctx.legitimate;
+    if (p_phish_ml < this.trainedBinaryClassifier.threshold && p_legit_ml >= 0.6) {
+      p_legitimate = Math.max(p_legitimate, Number(p_legit_ml.toFixed(2)));
+    } else if (p_phish_ml >= this.trainedBinaryClassifier.threshold && !contextualResult.contextualFindings.some(f => f.includes('Routine') || f.includes('Standard internal'))) {
+      p_legitimate = Math.min(p_legitimate, 0.08);
+    }
+
+    const primaryThreats: string[] = [];
+    if (p_credential_theft >= 0.70) primaryThreats.push('Credential Phishing');
+    if (p_bec >= 0.70) primaryThreats.push('Business Email Compromise (BEC)');
+    if (p_malware_delivery >= 0.70) primaryThreats.push('Malware Delivery');
+    if (p_spear_phishing >= 0.70) primaryThreats.push('Spear Phishing');
+    if (p_phishing >= 0.70 && !primaryThreats.includes('Credential Phishing')) primaryThreats.push('Phishing');
+
+    const maxThreatProb = Math.max(p_credential_theft, p_phishing, p_bec, p_malware_delivery, p_spear_phishing);
+    const nlpRisk = Math.round(
+      Math.min(100, Math.max(0, maxThreatProb * 100 * (1 - p_legitimate * 0.45)))
+    );
+
+    const findings = [...contextualResult.contextualFindings];
+    if (p_phish_ml >= this.trainedBinaryClassifier.threshold) {
+      findings.push(`Trained NLP Classifier: Statistical threat probability ${(p_phish_ml * 100).toFixed(1)}% (Threshold: ${this.trainedBinaryClassifier.threshold}).`);
+    }
+
+    return {
+      probabilities: {
+        phishing: p_phishing,
+        spear_phishing: p_spear_phishing,
+        bec: p_bec,
+        credential_theft: p_credential_theft,
+        social_engineering: p_social_engineering,
+        malware_delivery: p_malware_delivery,
+        spam: p_spam,
+        legitimate: p_legitimate,
+      },
+      nlpRisk,
+      primaryThreats,
+      contextualFindings: findings,
+      modelTier: 'TRAINED_TFIDF_LOGISTIC_REGRESSION',
+    };
   }
 
   /**

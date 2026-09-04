@@ -1,0 +1,505 @@
+text,label,phishing_type,severity,confidence
+"Subject: Office maintenance
+
+Thanks for your help on the analysis. I've pushed the changes and left comments in the PR for clarity.
+
+Let me know if the timing works for you.
+
+Best,
+Avery Kim",0,legitimate,low,0.95
+"Hello, your profile has been locked. Use the secure link to verify your username and restore access. Enter your verification code to continue.
+
+Keywords: pin update password sign in settings password
+
+Sincerely,
+Riley Khan",1,credential_harvesting,high,0.89
+"Hi there, congratulations! You are the winner of a refund. To collect your gift of $10,000, please provide your credit card to process the sum. This offer is available today only.
+
+Keywords: million contest ssn
+
+Security Team,
+Alex Khan",1,financial_scam,medium,0.69
+"Attention, this is the fraud prevention accounts team. There are security violations on your account. To remain in good standing, follow the confidential steps to review your account today. Failure to respond may result in a suspension.
+
+Keywords: mcafee telegram violations official apple
+
+Compliance Team,
+Alex Martinez",1,authority_scam,high,0.91
+"Notice, your profile has been restricted. Use the secure link to reset password and restore access. Enter your 2FA code to continue.
+
+Keywords: forgot password preferences settings
+
+IT Desk,
+Sam Singh",1,credential_harvesting,high,0.8
+"Attention, this is an urgent notice regarding your account. Your access will expire soon. To avoid interruption, act now and follow the instructions immediately. This is time sensitive and ends soon.
+
+Keywords: don't wait, expire, instantly, expires midnight, last chance, hurry
+
+Support Desk,
+Jamie Khan",1,urgency,medium,0.74
+"Subject: Training session notes
+
+I booked the lab for next Wednesday. The calendar invite includes location and equipment details.
+
+Let me know if the timing works for you.
+
+Best,
+Alex Khan",0,legitimate,low,0.95
+"Subject: Meeting follow-up
+
+Thanks for attending the workshop. Here are links to references and the slide deck.
+
+Feel free to add notes before we meet.
+
+Best,
+Casey Singh",0,legitimate,low,0.99
+"Subject: Research discussion
+
+Good morning, the updated agenda for next week is included below. Please check your items and add comments.
+
+Let me know if the timing works for you.
+
+Best,
+Taylor Wong",0,legitimate,low,0.98
+"Attention, your account has been restricted. Use the secure link to reset password and restore access. Enter your 2FA code to continue.
+
+Keywords: forgot password profile two factor activation code passcode
+
+Sincerely,
+Riley Lee",1,credential_harvesting,high,0.88
+"Subject: Classroom logistics
+
+Sharing the revised documentation with examples. The new endpoints are described in section two.
+
+Appreciate your feedback on this draft.
+
+Best,
+Sam Martinez",0,legitimate,low,0.97
+"Dear customer, your account requires verification. To restore access, reset your password and enter your username, 2FA verification code, and recovery key.
+
+Keywords: security question, recover account, password, log in, signin
+
+Regards,
+Jordan Patel",1,credential_harvesting,high,0.85
+"Attention, we talked about meeting again after the conference. An unexpected situation came up during my business trip. My wallet was stolen at the hotel and payment verification failed. Could you help me with a temporary loan? I will transfer back next week.
+
+Keywords: afghanistan, love, oil rig
+
+Regards,
+Alex Khan",1,romance_dating,medium,0.92
+"Attention, we talked about meeting again after the conference. An unexpected situation came up during my business trip. My wallet was stolen at the hotel and payment verification failed. Could you help me with a temporary loan? I will transfer back next week.
+
+Keywords: remembered you, sincere, doctor, soulmate, businessman
+
+Support Desk,
+Cameron Singh",1,romance_dating,medium,0.74
+"Hello, congratulations! You are the winner of a prize. To collect your payment of ₹80,000, please provide your credit card to process the total. This offer is available today only.
+
+Keywords: winner deal reward million
+
+Account Services,
+Avery Garcia",1,financial_scam,high,0.77
+"Subject: Onboarding checklist
+
+Hi team, sharing notes from today's sync. Next steps are in the shared doc. Let me know your thoughts.
+
+Feel free to add notes before we meet.
+
+Best,
+Avery Brown",0,legitimate,low,0.97
+"Hello, your account has been suspended. Use the secure link to update password and restore access. Enter your verification code to continue.
+
+Keywords: authentication update password
+
+IT Desk,
+Taylor Brown",1,credential_harvesting,high,0.89
+"Hello, we talked about meeting again after the conference. An unexpected situation came up during my business trip. My wallet was stolen at the hotel and payment verification failed. Could you help me with a temporary loan? I will transfer back next week.
+
+Keywords: widow, charity gala, hotel, we met, money needed, transfer back
+
+Regards,
+Jordan Nguyen",1,romance_dating,medium,0.86
+"Subject: Project update
+
+Good morning, the updated agenda for next week is included below. Please check your items and add comments.
+
+Appreciate your feedback on this draft.
+
+Best,
+Jamie Patel",0,legitimate,low,0.96
+"Hi there, this is an urgent notice regarding your account. Your access will expire soon. To avoid interruption, act now and follow the instructions immediately. This is time sensitive and ends soon.
+
+Keywords: act now, expires soon, ends soon, today only
+
+Security Team,
+Jordan Khan",1,urgency,high,0.84
+"Notice, you have a new notification. Please click here to view the update. For your convenience, a link and attachment are included. Do not reply to this auto-generated message.
+
+Keywords: alert, click here, notice, secret
+
+Security Team,
+Sam Wong",1,generic_phishing,medium,0.77
+"Notice, final warning. Failure to respond will block your account. Immediate action is required to avoid fine. Your case will be referred to the judge if unresolved.
+
+Keywords: prosecution delete
+
+Account Services,
+Jordan Garcia",1,threats,high,0.85
+"Subject: Invoice confirmation
+
+I booked the lab for next Wednesday. The calendar invite includes location and equipment details.
+
+I'll share the slides later today.
+
+Best,
+Riley Singh",0,legitimate,low,0.97
+"Subject: Documentation review
+
+Thanks for attending the workshop. Here are links to references and the slide deck.
+
+I'll share the slides later today.
+
+Best,
+Cameron Lee",0,legitimate,low,1.0
+"Dear customer, this is an while supplies last notice regarding your account. Your access will be limited within 24 hours. To avoid interruption, complete the form now. This offer is time sensitive and expires midnight. Follow the instructions immediately.
+
+Keywords: expires immediate don't wait time sensitive
+
+Support Desk,
+Casey Wong",1,urgency,high,0.89
+"Dear user, this is an urgent notice regarding your account. Your access will expire soon. To avoid interruption, act now and follow the instructions immediately. This is time sensitive and ends soon.
+
+Keywords: instantly, today only, while supplies last, expires, don't wait
+
+Regards,
+Riley Wong",1,urgency,high,0.86
+"Subject: Welcome aboard
+
+Sharing the revised documentation with examples. The new endpoints are described in section two.
+
+Let me know if the timing works for you.
+
+Best,
+Alex Brown",0,legitimate,low,0.99
+"Dear user, the IT department detected a malware infection on your workstation. Run the antivirus scan and install the security patch from the provided link to fix the issue.
+
+Keywords: tech support, issue, maintenance
+
+Compliance Team,
+Sam Singh",1,tech_support,high,0.93
+"Dear user, I remembered you mentioning the children's hospital charity gala where we ran into each other. I'm a stranded traveler right now; the hotel is asking for payment verification to extend stay. If you could assist with an emergency loan, I can provide replacement cards soon—trust building is important to me.
+
+Keywords: we talked about, financial request, unusual, payment verification, children's hospital
+
+Security Team,
+Taylor Brown",1,social_engineering_advanced,high,0.95
+"Subject: Onboarding checklist
+
+Good morning, the updated agenda for next week is included below. Please check your items and add comments.
+
+Feel free to add notes before we meet.
+
+Best,
+Avery Kim",0,legitimate,low,0.99
+"Subject: Networking event details
+
+I booked the lab for next Wednesday. The calendar invite includes location and equipment details.
+
+Appreciate your feedback on this draft.
+
+Best,
+Avery Martinez",0,legitimate,low,1.0
+"Attention, this is the irs compliance team. There are security concerns on your account. To remain in good standing, follow the official steps to review your account today. Failure to respond may result in a hold.
+
+Keywords: official twitter
+
+Sincerely,
+Jordan Lee",1,authority_scam,high,0.89
+"Subject: Research discussion
+
+Attaching the draft proposal. Feedback by Friday would be appreciated so we can finalize for the client.
+
+Feel free to add notes before we meet.
+
+Best,
+Avery Patel",0,legitimate,low,1.0
+"Dear customer, this is the immigration accounts team. There are policy concerns on your account. To remain in good standing, follow the confidential steps to review your account today. Failure to respond may result in a suspension.
+
+Keywords: mastercard president visa
+
+Security Team,
+Sam Khan",1,authority_scam,high,0.86
+"Subject: Team lunch planning
+
+Please find the minutes from our last meeting. Action items are listed at the end for convenience.
+
+Thanks for reviewing the document.
+
+Best,
+Casey Khan",0,legitimate,low,0.99
+"Dear user, your login has been restricted. Use the secure link to reset password and restore access. Enter your verification code to continue.
+
+Keywords: login passcode personal information password username
+
+Account Services,
+Jordan Nguyen",1,credential_harvesting,high,0.8
+"Subject: Lab booking confirmation
+
+Quick reminder about the training session tomorrow. The materials are in the shared drive.
+
+Feel free to add notes before we meet.
+
+Best,
+Taylor Khan",0,legitimate,low,1.0
+"Dear customer, this is an 48 hours notice regarding your account. Your access will expire today. To avoid interruption, act now. This offer is last chance and ends soon. Follow the instructions immediately.
+
+Keywords: deadline now 48 hours final notice
+
+Support Desk,
+Riley Lee",1,urgency,medium,0.89
+"Subject: Lab availability
+
+I booked the lab for next Wednesday. The calendar invite includes location and equipment details.
+
+Feel free to add notes before we meet.
+
+Best,
+Casey Garcia",0,legitimate,low,0.97
+"Subject: Budget planning
+
+Sharing the revised documentation with examples. The endpoints are described in section two.
+
+Feel free to add notes before we meet.
+
+Best,
+Morgan Nguyen",0,legitimate,low,0.99
+"Subject: Conference registration
+
+Good morning, the updated agenda for next week is included below. Please check your items and add comments.
+
+Appreciate your feedback on this draft.
+
+Best,
+Riley Singh",0,legitimate,low,0.98
+"Subject: Performance feedback
+
+I booked the lab for next Wednesday. The calendar invite includes location and equipment details.
+
+Feel free to add notes before we meet.
+
+Best,
+Cameron Singh",0,legitimate,low,0.99
+"Notice, the IT department detected a malware infection on your workstation. Run the antivirus scan and install the security patch from the provided link to fix the issue.
+
+Keywords: spyware, patch, system administrator, problem, error, technical support
+
+Regards,
+Casey Nguyen",1,tech_support,high,0.93
+"Subject: Office maintenance
+
+Sharing the revised documentation with examples. The new endpoints are described in section two.
+
+Let me know if the timing works for you.
+
+Best,
+Riley Patel",0,legitimate,low,0.98
+"Subject: Welcome aboard
+
+Thanks for attending the workshop. Here are links to references and the slide deck.
+
+Let me know if the timing works for you.
+
+Best,
+Sam Khan",0,legitimate,low,1.0
+"Subject: Documentation review
+
+Sharing the revised documentation with examples. The new endpoints are described in section two.
+
+Let me know if the timing works for you.
+
+Best,
+Avery Singh",0,legitimate,low,0.95
+"Subject: Classroom logistics
+
+Quick reminder about the training session tomorrow. The materials are in the shared drive.
+
+Appreciate your feedback on this draft.
+
+Best,
+Sam Singh",0,legitimate,low,0.97
+"Account holder, your profile has been restricted. Use the secure link to update password and restore access. Enter your verification code to continue.
+
+Keywords: security code signin
+
+Regards,
+Riley Patel",1,credential_harvesting,high,0.89
+"Hello, this is the paypal security team. There are policy violations on your account. To remain in good standing, follow the confidential steps to review your account today. Failure to respond may result in a restriction.
+
+Keywords: twitter fbi
+
+Compliance Team,
+Morgan Patel",1,authority_scam,high,0.8
+"Subject: Performance feedback
+
+Thanks for attending the workshop. Here are the links to references and the slide deck.
+
+Thanks for reviewing the document.
+
+Best,
+Sam Lee",0,legitimate,low,0.97
+"Hello, final warning. Failure to respond will hold your account. Immediate action is required to avoid fine. Your case will be referred to the judge if unresolved.
+
+Keywords: lawsuit penalty hold
+
+Risk Operations,
+Cameron Wong",1,threats,high,0.9
+"Attention, you have a new notification. Please click here to view the update. For your convenience, a link and attachment are included. Do not reply to this auto-generated message.
+
+Keywords: share, click here, delete after reading, sensitive, do not share
+
+Compliance Team,
+Alex Nguyen",1,generic_phishing,medium,0.66
+"Subject: Weekly status report
+
+Hello, confirming our meeting on Thursday at 2 PM in the conference room. Please bring the draft slides for review.
+
+Feel free to add notes before we meet.
+
+Best,
+Jamie Patel",0,legitimate,low,0.95
+"Subject: Schedule confirmation
+
+Attaching the draft proposal. Feedback by Friday would be appreciated so we can finalize for the client.
+
+Let me know if the timing works for you.
+
+Best,
+Jamie Lee",0,legitimate,low,0.96
+"Dear user, this is the legal compliance team. There are policy violations on your account. To remain in good standing, follow the official steps to review your account today. Failure to respond may result in a suspension.
+
+Keywords: lawyer ceo
+
+IT Desk,
+Morgan Garcia",1,authority_scam,high,0.92
+"Dear user, your account requires verification. To restore access, reset your password and enter your username, 2FA verification code, and recovery key.
+
+Keywords: personal information, security question, login
+
+Security Team,
+Jamie Patel",1,credential_harvesting,high,0.8
+"Hello, we detected unusual activity on your account. To restore access, please update your information. Your account may be restricted until you reactivate it.
+
+Keywords: unauthorized restore breach
+
+Account Services,
+Alex Kim",1,social_engineering,high,0.81
+"Hi there, this is an urgent notice regarding your account. Your access will expire soon. To avoid interruption, act now and follow the instructions immediately. This is time sensitive and ends soon.
+
+Keywords: instantly, last chance, final notice, today only, rush, 24 hours
+
+Compliance Team,
+Sam Wong",1,urgency,high,0.89
+"Subject: Training session notes
+
+Quick reminder about the training session tomorrow. The materials are in the shared drive.
+
+Appreciate your feedback on this draft.
+
+Best,
+Casey Lee",0,legitimate,low,0.95
+"Hello, this is the fraud prevention compliance team. There are security concerns on your account. To remain in good standing, follow the confidential steps to review your account today. Failure to respond may result in a restriction.
+
+Keywords: acquisition bank of america spotify whatsapp visa
+
+Sincerely,
+Sam Nguyen",1,authority_scam,high,0.95
+"Subject: Office maintenance
+
+Please find the minutes from our last meeting. Action items are listed at the end of the note for convenience.
+
+I'll share the slides later today.
+
+Best,
+Jamie Patel",0,legitimate,low,0.98
+"Subject: Documentation review
+
+I booked the lab for next Wednesday. The calendar invite includes location and equipment details.
+
+I'll share the slides later today.
+
+Best,
+Alex Garcia",0,legitimate,low,0.97
+"Dear customer, we talked about meeting again after the conference. An unexpected situation came up during my business trip. My wallet was stolen at the hotel and payment verification failed. Could you help me with a temporary loan? I will transfer back next week.
+
+Keywords: we met, soldier, doctor
+
+Compliance Team,
+Casey Lee",1,romance_dating,high,0.87
+"Subject: Onboarding checklist
+
+Thanks for attending the workshop. Here are the links to references and the slide deck.
+
+I'll share the slides later today.
+
+Best,
+Jordan Patel",0,legitimate,low,0.99
+"Attention, we detected a login attempt on your account. To verify access, please validate your information. Your account may be locked until you recover it.
+
+Keywords: restricted login attempt violation unauthorized compromised
+
+Risk Operations,
+Jordan Lee",1,social_engineering,high,0.87
+"Subject: Code review summary
+
+Please find the minutes from our last meeting. Action items are listed at the end for convenience.
+
+Thanks for reviewing the document.
+
+Best,
+Jordan Brown",0,legitimate,low,0.96
+"Hi there, congratulations! You are the selected recipient of a prize. To redeem your payment of ₹80,000, please provide your credit card to process the total. This deal is available today only.
+
+Keywords: earnings refund amount transfer
+
+Security Team,
+Casey Lee",1,financial_scam,medium,0.74
+"Subject: Classroom logistics
+
+Thanks for your help on the analysis. I've pushed the changes and left comments in the PR for clarity.
+
+I'll share the slides later today.
+
+Best,
+Morgan Kim",0,legitimate,low,0.95
+"Dear customer, you have a new notification. Please click here to view the update. For your convenience, a link and attachment are included. Do not reply to this auto-generated message.
+
+Keywords: do not reply, noreply, visit, announcement
+
+Regards,
+Taylor Brown",1,generic_phishing,low,0.74
+"Dear user, final warning. Failure to respond will hold your account. Immediate action is required to avoid legal action. Your case will be referred to the judge if unresolved.
+
+Keywords: default delete final warning terminate
+
+IT Desk,
+Morgan Brown",1,threats,high,0.83
+"Notice, this is an urgent notice regarding your account. Your access will expire soon. To avoid interruption, act now and follow the instructions immediately. This is time sensitive and ends soon.
+
+Keywords: deadline, asap, while supplies last
+
+Compliance Team,
+Jamie Wong",1,urgency,high,0.78
+"Subject: Research discussion
+
+Sharing the revised documentation with examples. The new endpoints are described in section two.
+
+Appreciate your feedback on this draft.
+
+Best,
+Jamie Kim",0,legitimate,low,0.95
+"Attention, this is an act now notice regarding your account. Your access will expire within 24 hours. To avoid interruption, respond asap. This offer is time sensitive and ends soon. Follow the instructions now.
+
+Keywords: act now 24 hours
+
+Regards,
+Taylor Brown",1,urgency,high,0.85

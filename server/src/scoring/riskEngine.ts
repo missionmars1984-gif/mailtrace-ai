@@ -354,13 +354,20 @@ export class RiskEngine {
       addContributor('Cryptographic Authentication Policy Failure', Math.round(authenticationRisk * 0.15), 'Header Engine', 'HIGH');
     }
 
-    // 5. Calculate preliminary raw score
-    let rawScore = Math.round(weightedBase * 1.35 + synergyBonus * 0.7);
+    // 5. Calculate preliminary raw score with diminishing returns on compounding synergy bonuses
+    const effectiveSynergy = synergyBonus > 28 ? 28 + (synergyBonus - 28) * 0.35 : synergyBonus;
+    let rawScore = Math.round(weightedBase * 1.35 + effectiveSynergy * 0.7);
 
     // Text-only conversational lure ceiling: emails lacking both destination URLs and executable/binary attachments
     // are conversational pretexts. Without active exploit or credential site, calibrated ceiling is 94.
     if (urls.length === 0 && attachments.length === 0) {
       rawScore = Math.min(94, rawScore);
+    }
+
+    // Quishing QR-code credential lure ceiling: QR-code lures requiring out-of-band mobile capture
+    // without active weaponized binary attachments are calibrated to High Risk (ceiling 92).
+    if (becPatterns.hasQuishing && !attachments.some((a) => a.isDangerous)) {
+      rawScore = Math.min(92, rawScore);
     }
 
     // ========================================================
