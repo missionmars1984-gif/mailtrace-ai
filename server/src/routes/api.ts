@@ -123,6 +123,18 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
     identityModelOutput.identityAnalysis.observed.sendingIp = hops[0].ip;
   }
 
+  // 11b. Distinct Separation: Claimed Location (from email body) vs Observed Infrastructure Location (from GeoIP)
+  const claimedLocationMatch = parsed.bodyText.match(/(?:location|login location|signed in from|login from)\s*:\s*([^\r\n,;]+(?:,\s*[^\r\n,;]+)?)/i);
+  const claimedLocation = claimedLocationMatch ? claimedLocationMatch[1].trim() : undefined;
+
+  let observedLocation = 'No routable public infrastructure detected';
+  if (observedOriginRelay?.ip && !observedOriginRelay.isPrivate) {
+    const geo = observedOriginRelay.geo;
+    observedLocation = `${geo?.city ? geo.city + ', ' : ''}${geo?.country || 'Unknown Jurisdiction'} (${geo?.asn || 'Public ASN'} ${geo?.org || ''})`.trim();
+  } else if (hops.some(h => h.ip && h.isPrivate)) {
+    observedLocation = 'Geolocation unavailable — private/internal IP';
+  }
+
   // Consolidate findings across all independent models
   const findings: SecurityFinding[] = [
     ...identityModelOutput.findings,
@@ -133,6 +145,17 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
     ...socialOutput.findings,
     ...infraFindings,
   ];
+
+  if (claimedLocation && observedLocation && !observedLocation.includes('unavailable') && !observedLocation.includes('No routable')) {
+    findings.push({
+      type: 'IDENTITY',
+      severity: 'HIGH',
+      title: 'Claimed vs Observed Location Discrepancy',
+      source: 'Forensics',
+      observed: `Email body claims sender location is "${claimedLocation}", but technical transport envelope originated from observed infrastructure: ${observedLocation}.`,
+      impact: 'Physical location claims in message text are unverified and conflict with observable network routing.',
+    });
+  }
 
   // 12. EVIDENCE FUSION LAYER (Calibrated multi-model weighting + Hard Escalation Safeguards)
   const scoreBreakdown = RiskEngine.evaluate({
@@ -380,6 +403,8 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
     rawHeaders: parsed.rawHeaders,
     observedOriginRelay,
     geoDiagnostic,
+    claimedLocation,
+    observedLocation,
   };
 
   // 19. Persist to SQLite

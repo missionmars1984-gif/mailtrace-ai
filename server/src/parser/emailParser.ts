@@ -41,10 +41,13 @@ export class EmailParser {
   static async parse(rawSource: string | Buffer): Promise<EmailParseResult> {
     let rawText = typeof rawSource === 'string' ? rawSource : rawSource.toString('utf-8');
 
-    // 0. Sanitize BOM and leading blank lines before the first RFC 5322 header
+    // 0. Sanitize BOM, mbox envelope lines, and leading blank lines before the first RFC 5322 header
     if (rawText.charCodeAt(0) === 0xfeff) {
       rawText = rawText.slice(1);
     }
+    // Strip mbox 'From ' envelope line if present at start
+    rawText = rawText.replace(/^From\s+[^\r\n]*\r?\n/, '');
+
     const firstHeaderMatch = rawText.match(/^[A-Za-z0-9_\-]+:/m);
     if (firstHeaderMatch && firstHeaderMatch.index !== undefined && firstHeaderMatch.index > 0) {
       const leadingPrefix = rawText.slice(0, firstHeaderMatch.index);
@@ -114,46 +117,66 @@ export class EmailParser {
     }
 
     // 7. Subject Extraction (RFC 5322 Section 2.1 & 2.2.3 and RFC 2047)
-    // Extract raw header block (strictly before the first blank line) to isolate message headers from body
+    // Check multiple authoritative sources:
+    // (a) mailparser's headers map
+    // (b) header block regex
+    // (c) full message regex fallback
     const blankLineMatch = rawText.match(/\r?\n[ \t]*\r?\n/);
     const headerSection = blankLineMatch && blankLineMatch.index !== undefined
       ? rawText.slice(0, blankLineMatch.index)
       : rawText;
 
-    // Detect Subject header in the header block (case-insensitive, supporting folded multi-line headers)
     const subjectHeaderRegex = /(?:^|\r?\n)subject[ \t]*:([^\r\n]*(?:\r?\n[ \t]+[^\r\n]*)*)/i;
-    const subjectHeaderMatch = headerSection.match(subjectHeaderRegex);
-    const hasSubjectHeader = subjectHeaderMatch !== null;
+    const headerSectionMatch = headerSection.match(subjectHeaderRegex);
+    const rawTextMatch = rawText.match(subjectHeaderRegex);
+    const subjectHeaderMatch = headerSectionMatch || rawTextMatch;
+
+    const hasSubjectInParserHeaders = Boolean(parsed.headers && parsed.headers.has('subject'));
+    const hasParsedSubject = typeof parsed.subject === 'string' && parsed.subject.trim().length > 0;
+    const hasSubjectHeader = hasSubjectInParserHeaders || subjectHeaderMatch !== null || hasParsedSubject;
 
     let subject = '(No Subject)';
 
     if (hasSubjectHeader) {
-      // Unfold multi-line folded header (RFC 5322 section 2.2.3: CRLF + WSP -> single space)
-      let rawSubjectVal = subjectHeaderMatch[1].replace(/\r?\n[ \t]+/g, ' ').trim();
-
-      // Check if mailparser decoded a valid subject
-      if (typeof parsed.subject === 'string' && parsed.subject.trim().length > 0) {
-        subject = parsed.subject.trim();
+      if (hasParsedSubject) {
+        subject = parsed.subject!.trim();
         // If mailparser left RFC 2047 encoded words untouched, decode with libmime
         if (/=\?[^?]+\?[bBqQ]\?[^?]+\?=/i.test(subject)) {
           try {
             subject = (libmime as any).decodeWords(subject).trim();
           } catch {}
         }
-      } else if (rawSubjectVal.length > 0) {
-        // Fallback to unfolded header value, decoding RFC 2047 words
-        if (/=\?[^?]+\?[bBqQ]\?[^?]+\?=/i.test(rawSubjectVal)) {
-          try {
-            rawSubjectVal = (libmime as any).decodeWords(rawSubjectVal).trim();
-          } catch {}
+      } else if (subjectHeaderMatch && typeof subjectHeaderMatch[1] === 'string') {
+        // Unfold multi-line folded header (RFC 5322 section 2.2.3: CRLF + WSP -> single space)
+        let rawSubjectVal = subjectHeaderMatch[1].replace(/\r?\n[ \t]+/g, ' ').trim();
+        if (rawSubjectVal.length > 0) {
+          if (/=\?[^?]+\?[bBqQ]\?[^?]+\?=/i.test(rawSubjectVal)) {
+            try {
+              rawSubjectVal = (libmime as any).decodeWords(rawSubjectVal).trim();
+            } catch {}
+          }
+          subject = rawSubjectVal;
+        } else {
+          // Subject header explicitly exists but has an empty value (Test 8)
+          subject = '';
         }
-        subject = rawSubjectVal;
+      } else if (hasSubjectInParserHeaders) {
+        // Mailparser header map detected 'subject' but parsed.subject was empty/undefined
+        const headerVal = parsed.headers.get('subject');
+        if (typeof headerVal === 'string' && headerVal.trim().length > 0) {
+          let val = headerVal.trim();
+          if (/=\?[^?]+\?[bBqQ]\?[^?]+\?=/i.test(val)) {
+            try { val = (libmime as any).decodeWords(val).trim(); } catch {}
+          }
+          subject = val;
+        } else {
+          subject = '';
+        }
       } else {
-        // Subject header exists explicitly but has an empty value
         subject = '';
       }
     } else {
-      // Subject header does not exist in the email header section
+      // Subject header does not exist in the email header section (Test 9)
       subject = '(No Subject)';
     }
 
@@ -444,6 +467,9 @@ export class EmailParser {
       const byMatch = hopText.match(/by\s+([^\s;()]+)/i);
       const dateMatch = hopText.match(/;\s*([^;]+)$/);
 
+      const hostnameMatch = hopText.match(/from\s+([a-zA-Z0-9.\-_]+)/i) || hopText.match(/by\s+([a-zA-Z0-9.\-_]+)/i);
+      const hostname = hostnameMatch ? hostnameMatch[1].trim() : (fromMatch ? fromMatch[1].split(/\s+/)[0].trim() : undefined);
+
       let from = fromMatch ? fromMatch[1].trim() : undefined;
       let by = byMatch ? byMatch[1].trim() : undefined;
       let timestamp: string | undefined = undefined;
@@ -463,10 +489,12 @@ export class EmailParser {
         hopNumber: i + 1,
         from,
         by,
+        hostname,
         ip,
         timestamp,
         isPrivate: classification ? classification.isPrivate : undefined,
         ipType: classification ? classification.type : undefined,
+        classification: classification ? classification.type : undefined,
         rawHopText: hopText,
       });
     }
@@ -486,10 +514,12 @@ export class EmailParser {
             hopNumber: 1,
             from: 'Client MUA / Webmail Interface',
             by: 'Mail Ingestion Relay',
+            hostname: 'Client MUA',
             ip: foundIp,
             timestamp: hops[0]?.timestamp || new Date().toISOString(),
             isPrivate: classification.isPrivate,
             ipType: classification.type,
+            classification: classification.type,
             rawHopText: `X-Originating-IP: ${foundIp}`,
           });
           // Renumber subsequent hops
@@ -509,10 +539,12 @@ export class EmailParser {
           hopNumber: hops.length + 1,
           from: 'SPF Designated Relay',
           by: 'Inbound Gateway',
+          hostname: 'SPF Designated Relay',
           ip,
           timestamp: new Date().toISOString(),
           isPrivate: classification.isPrivate,
           ipType: classification.type,
+          classification: classification.type,
           rawHopText: authRaw,
         });
       }
@@ -526,8 +558,12 @@ export class EmailParser {
    * Prioritizes IPs located in the transmitting `from` clause.
    */
   private static extractPrimaryIpFromHop(hopText: string): string | undefined {
-    // 1. Check bracketed IPs first: [209.85.220.41] or [IPv6:2001:db8::1]
-    const bracketedMatch = hopText.match(/\[(?:ipv6:)?([0-9a-fA-F:.]+)\]/i);
+    // 1. Check transmitting 'from' clause first
+    const fromClauseMatch = hopText.match(/\bfrom\s+([\s\S]*?)(?=\s+by\s+|\s+with\s+|\s+id\s+|;|$)/i);
+    const searchTarget = fromClauseMatch ? fromClauseMatch[1] : hopText;
+
+    // Check bracketed IPs first in from section: [209.85.220.41] or [IPv6:2001:db8::1]
+    const bracketedMatch = searchTarget.match(/\[(?:ipv6:)?([0-9a-fA-F:.]+)\]/i);
     if (bracketedMatch && bracketedMatch[1]) {
       const cand = bracketedMatch[1].trim();
       if (GeoLocationProvider.isPrivateOrReserved(cand).type !== 'INVALID') {
@@ -535,8 +571,8 @@ export class EmailParser {
       }
     }
 
-    // 2. Check parenthesized comments: (mail.example.com 203.0.113.10) or (203.0.113.10)
-    const parenMatch = hopText.match(/\((?:[^)]*?\s+)?(?:\[(?:ipv6:)?([0-9a-fA-F:.]+)\]|(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}))\)/i);
+    // Check parenthesized comments in from section: (mail.example.com 203.0.113.10) or (203.0.113.10)
+    const parenMatch = searchTarget.match(/\((?:[^)]*?\s+)?(?:\[(?:ipv6:)?([0-9a-fA-F:.]+)\]|(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}))\)/i);
     if (parenMatch) {
       const cand = (parenMatch[1] || parenMatch[2]).trim();
       if (GeoLocationProvider.isPrivateOrReserved(cand).type !== 'INVALID') {
@@ -544,7 +580,22 @@ export class EmailParser {
       }
     }
 
-    // 3. Extract all valid IPs and prioritize public ones over private cluster addresses
+    // Check all IPs in from clause
+    const fromIps = this.extractAllIpsFromText(searchTarget);
+    if (fromIps.length > 0) {
+      const publicIp = fromIps.find(ip => !GeoLocationProvider.isPrivateOrReserved(ip).isPrivate);
+      return publicIp || fromIps[0];
+    }
+
+    // 2. If no IP found in from clause, search full hop text
+    const fullBracketed = hopText.match(/\[(?:ipv6:)?([0-9a-fA-F:.]+)\]/i);
+    if (fullBracketed && fullBracketed[1]) {
+      const cand = fullBracketed[1].trim();
+      if (GeoLocationProvider.isPrivateOrReserved(cand).type !== 'INVALID') {
+        return cand;
+      }
+    }
+
     const allIps = this.extractAllIpsFromText(hopText);
     if (allIps.length > 0) {
       const publicIp = allIps.find(ip => !GeoLocationProvider.isPrivateOrReserved(ip).isPrivate);

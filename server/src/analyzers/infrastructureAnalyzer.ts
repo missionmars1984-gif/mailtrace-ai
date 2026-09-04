@@ -31,12 +31,37 @@ export class InfrastructureAnalyzer {
         isPrivate = Boolean(geo.isPrivate);
       }
 
+      const classification = geo?.ipType || hop.ipType || (isPrivate ? 'PRIVATE' : (ip ? 'PUBLIC' : 'INVALID'));
+
       const enriched: RouteHop = {
         ...hop,
+        hostname: hop.hostname || (hop.from ? hop.from.split(/\s+/)[0].trim() : undefined),
         isPrivate,
-        ipType: geo?.ipType,
+        ipType: classification,
+        classification,
+        country: geo?.country,
+        region: geo?.region,
+        city: geo?.city,
+        lat: geo?.lat,
+        lon: geo?.lon,
+        asn: geo?.asn,
+        org: geo?.org,
+        lookupStatus: geo?.lookupStatus || (isPrivate ? 'private_ip' : 'unavailable'),
         geo,
       };
+
+      // Diagnostic logging of complete chain for this hop
+      console.log(`[GEO PIPELINE] Hop #${enriched.hopNumber}:
+  Received header: "${enriched.rawHopText?.substring(0, 100) || 'N/A'}..."
+  IP extracted:    ${ip || 'None'}
+  Normalized IP:   ${geo?.ip || ip || 'None'}
+  Classification:  ${classification} (isPrivate: ${isPrivate})
+  Action:          ${!isPrivate && ip ? 'PUBLIC IP -> Querying GeoIP Provider' : (isPrivate ? 'PRIVATE IP -> Returning "Geolocation unavailable — private/internal IP"' : 'NO IP')}
+  GeoIP Status:    ${enriched.lookupStatus}
+  Country:         ${enriched.country || 'N/A'}
+  City:            ${enriched.city || 'N/A'}
+  ASN:             ${enriched.asn || 'N/A'}
+  Organization:    ${enriched.org || 'N/A'}`);
 
       enrichedHops.push(enriched);
     }

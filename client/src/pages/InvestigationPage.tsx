@@ -188,7 +188,9 @@ export const InvestigationPage: React.FC = () => {
               />
             </div>
             <h2 className="text-base font-bold text-slate-900 mt-1 truncate max-w-xl">
-              {caseData.metadata.subject}
+              {caseData.metadata.subject !== undefined && caseData.metadata.subject !== ''
+                ? caseData.metadata.subject
+                : (caseData.metadata.subject === '' ? '(Empty Subject)' : (caseData.subject || '(No Subject)'))}
             </h2>
           </div>
         </div>
@@ -206,7 +208,7 @@ export const InvestigationPage: React.FC = () => {
               >
                 {allCases.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.caseNumber} — {c.metadata.subject.substring(0, 24)}
+                    {c.caseNumber} — {(c.metadata.subject !== undefined && c.metadata.subject !== '' ? c.metadata.subject : (c.metadata.subject === '' ? '(Empty Subject)' : (c.subject || '(No Subject)'))).substring(0, 24)}
                   </option>
                 ))}
               </select>

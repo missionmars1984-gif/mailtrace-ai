@@ -288,7 +288,7 @@ export class DatabaseService {
   }
 
   static cacheGeoLocation(ip: string, geo: GeoLocationData): void {
-    if (!ip) return;
+    if (!ip || geo.isPrivate) return;
     try {
       const stmt = db.prepare(`
         INSERT OR REPLACE INTO geo_locations (

@@ -288,10 +288,10 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
               Country & Region
             </span>
             <span className="font-bold text-slate-900 text-sm block truncate">
-              {isPrivate ? 'Internal Network' : (geo?.country || 'Unavailable')}
+              {isPrivate ? 'Internal Network' : (geo?.country || activeHop?.country || 'Unavailable')}
             </span>
             <span className="text-[10px] text-slate-400 block mt-0.5">
-              Region: {isPrivate ? 'Internal Subnet' : (geo?.region || 'N/A')}
+              Region: {isPrivate ? 'Internal Subnet' : (geo?.region || activeHop?.region || 'N/A')}
             </span>
           </div>
 
@@ -300,10 +300,10 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
               City / Metropolitan
             </span>
             <span className="font-bold text-slate-900 text-sm block truncate">
-              {isPrivate ? 'Private Intranet' : (geo?.city || 'Unresolved')}
+              {isPrivate ? 'Private Intranet' : (geo?.city || activeHop?.city || 'Unresolved')}
             </span>
             <span className="text-[10px] text-slate-400 block mt-0.5">
-              Coordinates: {hasGenuinePin && geo?.lat !== undefined ? `${geo.lat.toFixed(4)}°, ${geo.lon?.toFixed(4)}°` : 'N/A'}
+              Coordinates: {hasGenuinePin && (geo?.lat !== undefined || activeHop?.lat !== undefined) ? `${(geo?.lat ?? activeHop?.lat)?.toFixed(4)}°, ${(geo?.lon ?? activeHop?.lon)?.toFixed(4)}°` : 'N/A'}
             </span>
           </div>
 
@@ -312,10 +312,10 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
               ASN & Internet Service Provider
             </span>
             <span className="font-mono font-bold text-slate-900 text-sm block">
-              {geo?.asn || (isPrivate ? 'RFC1918' : 'Unassigned')}
+              {geo?.asn || activeHop?.asn || (isPrivate ? 'RFC1918' : 'Unassigned')}
             </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5 truncate" title={geo?.org || geo?.isp}>
-              {geo?.org || geo?.isp || (isPrivate ? 'Internal Enterprise Cluster' : 'Unavailable')}
+            <span className="text-[10px] text-slate-400 block mt-0.5 truncate" title={geo?.org || geo?.isp || activeHop?.org}>
+              {geo?.org || geo?.isp || activeHop?.org || (isPrivate ? 'Internal Enterprise Cluster' : 'Unavailable')}
             </span>
           </div>
         </div>

@@ -57,6 +57,7 @@ export interface RouteHop {
   hopNumber: number;
   from?: string;
   by?: string;
+  hostname?: string;
   ip?: string;
   timestamp?: string;
   delayMs?: number;
@@ -64,7 +65,16 @@ export interface RouteHop {
   isOrigin?: boolean;
   isPublicOriginRelay?: boolean;
   ipType?: IpClassificationType;
+  classification?: IpClassificationType;
   rawHopText?: string;
+  country?: string;
+  region?: string;
+  city?: string;
+  lat?: number;
+  lon?: number;
+  asn?: string;
+  org?: string;
+  lookupStatus?: GeoLookupStatus;
   geo?: GeoLocationData;
 }
 
@@ -291,6 +301,8 @@ export interface CaseRecord {
   rawHeaders?: Record<string, string | string[]>;
   observedOriginRelay?: RouteHop;
   geoDiagnostic?: GeoPipelineDiagnostic;
+  claimedLocation?: string;
+  observedLocation?: string;
 }
 
 export interface DashboardStats {

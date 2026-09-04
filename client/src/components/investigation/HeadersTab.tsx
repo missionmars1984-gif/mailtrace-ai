@@ -31,7 +31,7 @@ export const HeadersTab: React.FC<HeadersTabProps> = ({ caseData }) => {
     { label: 'CC', value: metadata.cc && metadata.cc.length > 0 ? metadata.cc.map((c) => c.address).join(', ') : '(None)' },
     { label: 'Reply-To', value: metadata.replyTo ? `"${metadata.replyTo.name || ''}" <${metadata.replyTo.address}>` : '(Not Specified)' },
     { label: 'Return-Path', value: metadata.returnPath || '(Not Specified)' },
-    { label: 'Subject', value: metadata.subject || '(Empty Subject)' },
+    { label: 'Subject', value: metadata.subject !== undefined && metadata.subject !== '' ? metadata.subject : (metadata.subject === '' ? '(Empty Subject Header)' : '(No Subject Header)') },
     { label: 'Date', value: metadata.date ? new Date(metadata.date).toUTCString() : 'N/A' },
     { label: 'Message-ID', value: metadata.messageId || 'N/A' },
     { label: 'Authentication-Results', value: (rawHeaders && (rawHeaders['authentication-results'] as string)) || 'N/A' },

@@ -176,7 +176,7 @@ export const ReportTab: React.FC<ReportTabProps> = ({ caseData }) => {
             </div>
             <div className="p-2.5 bg-slate-50 rounded border border-slate-200 md:col-span-2">
               <strong className="font-sans text-[10px] text-slate-400 uppercase block">Subject</strong>
-              <span className="text-slate-900 break-all font-sans font-bold">{metadata.subject}</span>
+              <span className="text-slate-900 break-all font-sans font-bold">{metadata.subject !== undefined && metadata.subject !== '' ? metadata.subject : (metadata.subject === '' ? '(Empty Subject)' : '(No Subject)')}</span>
             </div>
           </div>
         </section>

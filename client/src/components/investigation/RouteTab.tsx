@@ -138,11 +138,15 @@ export const RouteTab: React.FC<RouteTabProps> = ({ caseData }) => {
                           Geographic & ASN Infrastructure
                         </span>
                         <span className="text-slate-700 font-sans break-all">
-                          {hop.geo?.country ? (
+                          {hop.isPrivate ? (
+                            <span className="text-amber-700 font-medium">
+                              Geolocation unavailable — private/internal IP
+                            </span>
+                          ) : (hop.geo?.country || hop.country) ? (
                             <span className="flex items-center gap-1.5">
                               <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                              {hop.geo.city ? `${hop.geo.city}, ` : ''}{hop.geo.country}
-                              {hop.geo.asn && <span className="font-mono text-slate-500">({hop.geo.asn})</span>}
+                              {(hop.geo?.city || hop.city) ? `${hop.geo?.city || hop.city}, ` : ''}{hop.geo?.country || hop.country}
+                              {(hop.geo?.asn || hop.asn) && <span className="font-mono text-slate-500">({hop.geo?.asn || hop.asn})</span>}
                             </span>
                           ) : (
                             'N/A (Local / Unresolved)'

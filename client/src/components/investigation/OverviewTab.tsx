@@ -65,7 +65,9 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({ caseData, onNavigateTa
             </div>
 
             <h3 className="text-xl font-bold text-slate-900 mt-3 tracking-tight">
-              {metadata.subject}
+              {metadata.subject !== undefined && metadata.subject !== ''
+                ? metadata.subject
+                : (metadata.subject === '' ? '(Empty Subject)' : '(No Subject)')}
             </h3>
 
             {threatTypes.length > 0 && (
