@@ -1,4 +1,6 @@
 import { simpleParser, ParsedMail } from 'mailparser';
+// @ts-ignore
+import libmime from 'libmime';
 import { ForensicHashService } from '../crypto/forensicHash.js';
 import type {
   EmailAddressInfo,
@@ -37,7 +39,21 @@ export interface EmailParseResult {
 
 export class EmailParser {
   static async parse(rawSource: string | Buffer): Promise<EmailParseResult> {
-    const parsed = await simpleParser(rawSource);
+    let rawText = typeof rawSource === 'string' ? rawSource : rawSource.toString('utf-8');
+
+    // 0. Sanitize BOM and leading blank lines before the first RFC 5322 header
+    if (rawText.charCodeAt(0) === 0xfeff) {
+      rawText = rawText.slice(1);
+    }
+    const firstHeaderMatch = rawText.match(/^[A-Za-z0-9_\-]+:/m);
+    if (firstHeaderMatch && firstHeaderMatch.index !== undefined && firstHeaderMatch.index > 0) {
+      const leadingPrefix = rawText.slice(0, firstHeaderMatch.index);
+      if (/^\s*$/.test(leadingPrefix)) {
+        rawText = rawText.slice(firstHeaderMatch.index);
+      }
+    }
+
+    const parsed = await simpleParser(rawText);
 
     // 1. From
     const fromAddr = parsed.from?.value?.[0];
@@ -97,8 +113,50 @@ export class EmailParser {
       returnPath = (returnPathRaw as any).text.replace(/[<>]/g, '').trim();
     }
 
-    // 7. Subject & Date & Message-ID
-    const subject = parsed.subject || '(No Subject)';
+    // 7. Subject Extraction (RFC 5322 Section 2.1 & 2.2.3 and RFC 2047)
+    // Extract raw header block (strictly before the first blank line) to isolate message headers from body
+    const blankLineMatch = rawText.match(/\r?\n[ \t]*\r?\n/);
+    const headerSection = blankLineMatch && blankLineMatch.index !== undefined
+      ? rawText.slice(0, blankLineMatch.index)
+      : rawText;
+
+    // Detect Subject header in the header block (case-insensitive, supporting folded multi-line headers)
+    const subjectHeaderRegex = /(?:^|\r?\n)subject[ \t]*:([^\r\n]*(?:\r?\n[ \t]+[^\r\n]*)*)/i;
+    const subjectHeaderMatch = headerSection.match(subjectHeaderRegex);
+    const hasSubjectHeader = subjectHeaderMatch !== null;
+
+    let subject = '(No Subject)';
+
+    if (hasSubjectHeader) {
+      // Unfold multi-line folded header (RFC 5322 section 2.2.3: CRLF + WSP -> single space)
+      let rawSubjectVal = subjectHeaderMatch[1].replace(/\r?\n[ \t]+/g, ' ').trim();
+
+      // Check if mailparser decoded a valid subject
+      if (typeof parsed.subject === 'string' && parsed.subject.trim().length > 0) {
+        subject = parsed.subject.trim();
+        // If mailparser left RFC 2047 encoded words untouched, decode with libmime
+        if (/=\?[^?]+\?[bBqQ]\?[^?]+\?=/i.test(subject)) {
+          try {
+            subject = (libmime as any).decodeWords(subject).trim();
+          } catch {}
+        }
+      } else if (rawSubjectVal.length > 0) {
+        // Fallback to unfolded header value, decoding RFC 2047 words
+        if (/=\?[^?]+\?[bBqQ]\?[^?]+\?=/i.test(rawSubjectVal)) {
+          try {
+            rawSubjectVal = (libmime as any).decodeWords(rawSubjectVal).trim();
+          } catch {}
+        }
+        subject = rawSubjectVal;
+      } else {
+        // Subject header exists explicitly but has an empty value
+        subject = '';
+      }
+    } else {
+      // Subject header does not exist in the email header section
+      subject = '(No Subject)';
+    }
+
     const date = parsed.date ? parsed.date.toISOString() : new Date().toISOString();
     const messageId = parsed.messageId || `gen-${Date.now()}@mailtrace.local`;
 
@@ -159,6 +217,9 @@ export class EmailParser {
       } else if (val && typeof val === 'object' && 'text' in val) {
         rawHeaders[key] = (val as any).text;
       }
+    }
+    if (hasSubjectHeader) {
+      rawHeaders['subject'] = subject;
     }
 
     // 13. Extract all URLs from HTML and plain text

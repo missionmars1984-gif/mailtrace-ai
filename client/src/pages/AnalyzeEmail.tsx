@@ -337,7 +337,7 @@ export const AnalyzeEmail: React.FC = () => {
                   </span>
                 </div>
                 <h2 className="text-xl font-bold text-[#0B1F3A] mt-3">
-                  {analyzedCase.metadata.subject}
+                  {analyzedCase.metadata.subject || analyzedCase.subject || '(No Subject)'}
                 </h2>
                 <p className="text-xs text-[#68809F] mt-1">
                   Received: {analyzedCase.metadata.date ? new Date(analyzedCase.metadata.date).toUTCString() : 'N/A'}

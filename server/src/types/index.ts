@@ -401,6 +401,7 @@ export interface CaseRecord {
   id: string;
   caseNumber: string;
   createdAt: string;
+  subject?: string;
   metadata: {
     from: EmailAddressInfo;
     to: EmailAddressInfo[];

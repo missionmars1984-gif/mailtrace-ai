@@ -318,6 +318,7 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
     id,
     caseNumber,
     createdAt,
+    subject: parsed.subject,
     metadata: {
       from: parsed.from,
       to: parsed.to,
