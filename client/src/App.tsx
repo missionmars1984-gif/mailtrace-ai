@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Sidebar } from './components/layout/Sidebar.js';
 import { Header } from './components/layout/Header.js';
@@ -25,10 +25,28 @@ import { LoginPage } from './pages/LoginPage.js';
 
 // Authenticated SOC Operations Layout
 const SocLayout: React.FC = () => {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('mailtrace:sidebar_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleToggleSidebar = () => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('mailtrace:sidebar_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
+
   return (
     <div className="flex h-screen bg-[#F7F9FC] text-[#0B1F3A] overflow-hidden font-sans">
-      {/* Left Sidebar (290px, white) */}
-      <Sidebar />
+      {/* Left Sidebar (290px expanded, 76px collapsed, white) */}
+      <Sidebar collapsed={sidebarCollapsed} onToggleCollapse={handleToggleSidebar} />
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">

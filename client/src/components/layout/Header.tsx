@@ -50,20 +50,22 @@ export const Header: React.FC<HeaderProps> = ({ onRefresh }) => {
     return () => clearInterval(timer);
   }, []);
 
-  const getPageTitle = (path: string) => {
+  const getPageTitle = (path: string): string => {
     if (path === '/') return 'Dashboard';
-    if (path.startsWith('/live-monitor')) return 'Live Threat Monitor';
-    if (path.startsWith('/analyze')) return 'Email Threat Analysis';
-    if (path.startsWith('/threat-intelligence')) return 'Threat Intelligence';
-    if (path.startsWith('/threat-map')) return 'Origin Threat Infrastructure Map';
-    if (path.startsWith('/campaigns')) return 'Attack Campaign Clusters';
-    if (path.startsWith('/cases')) return 'Forensic Investigation Cases';
-    if (path.startsWith('/investigation')) return 'Forensic Investigation';
-    if (path.startsWith('/reports')) return 'Forensic Reports & Dossiers';
-    if (path.startsWith('/assistant')) return 'AI Security Assistant';
-    if (path.startsWith('/monitoring')) return 'System Health & Telemetry';
-    if (path.startsWith('/settings')) return 'Platform Settings';
-    return 'MailTrace AI Forensics';
+    if (path.startsWith('/live-monitor') || path.startsWith('/exchange')) return 'Live Monitor';
+    if (path.startsWith('/analyze')) return 'Analyze Email';
+    if (path.startsWith('/threat-intelligence')) return 'Threat Intel';
+    if (path.startsWith('/threat-map') || path.startsWith('/map')) return 'Threat Map';
+    if (path.startsWith('/campaigns')) return 'Campaigns';
+    if (path.startsWith('/cases')) return 'Cases';
+    if (path.startsWith('/quarantine')) return 'Quarantine';
+    if (path.startsWith('/reports')) return 'Reports';
+    if (path.startsWith('/investigation')) return 'Investigation';
+    if (path.startsWith('/methodology')) return 'Methodology';
+    if (path.startsWith('/assistant')) return 'Security Assistant';
+    if (path.startsWith('/monitoring')) return 'Monitoring';
+    if (path.startsWith('/settings')) return 'Settings';
+    return 'Dashboard';
   };
 
   const handleSearch = (e: React.FormEvent) => {
@@ -84,28 +86,33 @@ export const Header: React.FC<HeaderProps> = ({ onRefresh }) => {
   };
 
   return (
-    <header className="h-[68px] bg-white border-b border-[#E5E9F2] px-8 flex items-center justify-between sticky top-0 z-20 shadow-[0_1px_3px_rgba(11,31,58,0.02)]">
-      {/* Current Page Title */}
-      <div className="flex items-center space-x-3">
-        <h2 className="text-xl font-bold text-[#0B1F3A] tracking-tight">
+    <header className="h-[68px] bg-white border-b border-[#E5E9F2] px-6 sm:px-8 flex items-center sticky top-0 z-20 shadow-[0_1px_3px_rgba(11,31,58,0.02)]">
+      {/* 1. [PAGE TITLE AREA] - Fixed stable width so Search Area starts at identical position on all routes */}
+      <div className="w-[170px] sm:w-[190px] lg:w-[220px] flex-shrink-0 flex items-center pr-3 sm:pr-4">
+        <h1
+          className="text-xl font-bold text-[#0B1F3A] tracking-tight truncate whitespace-nowrap"
+          title={getPageTitle(location.pathname)}
+        >
           {getPageTitle(location.pathname)}
-        </h2>
+        </h1>
       </div>
 
-      {/* Center Search Input */}
-      <form onSubmit={handleSearch} className="relative w-80 lg:w-96 hidden md:block">
-        <Search className="w-4 h-4 text-[#68809F] absolute left-3.5 top-3" />
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="Search emails, threats, IOCs..."
-          className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#F7F9FC] border border-[#E5E9F2] text-xs text-[#0B1F3A] placeholder-[#68809F] focus:outline-none focus:ring-2 focus:ring-[#246BFE]/30 focus:border-[#246BFE] transition-all"
-        />
-      </form>
+      {/* 2. [SEARCH AREA] - Constant horizontal starting offset, shrinks gracefully */}
+      <div className="flex-1 max-w-md min-w-[180px] hidden md:block">
+        <form onSubmit={handleSearch} className="relative w-full">
+          <Search className="w-4 h-4 text-[#68809F] absolute left-3.5 top-3" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search emails, threats, IOCs..."
+            className="w-full pl-10 pr-4 py-2 rounded-xl bg-[#F7F9FC] border border-[#E5E9F2] text-xs text-[#0B1F3A] placeholder-[#68809F] focus:outline-none focus:ring-2 focus:ring-[#246BFE]/30 focus:border-[#246BFE] transition-all"
+          />
+        </form>
+      </div>
 
-      {/* Right Controls */}
-      <div className="flex items-center space-x-4">
+      {/* 3. [RIGHT CONTROLS] - Consistently aligned on the right */}
+      <div className="flex items-center space-x-3 sm:space-x-4 flex-shrink-0 ml-auto">
         {/* System Health Status Pill */}
         <div className="hidden sm:flex items-center">
           {systemHealth === 'HEALTHY' && (
