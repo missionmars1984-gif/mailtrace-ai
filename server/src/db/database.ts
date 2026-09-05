@@ -290,6 +290,7 @@ export class DatabaseService {
         location: row.city ? `${row.city}, ${row.country}` : row.country,
         reason: isPrivate ? 'Private/internal IP' : undefined,
         ipType: row.ip_type,
+        classification: row.ip_type,
         lookupStatus: row.lookup_status || 'resolved',
         statusMessage: row.status_message || undefined,
         source: 'sqlite_cache',

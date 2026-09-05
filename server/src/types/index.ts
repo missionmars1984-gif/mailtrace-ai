@@ -56,8 +56,43 @@ export interface AuthenticationResults {
   raw?: string;
 }
 
-export type GeoLookupStatus = 'resolved' | 'unavailable' | 'private_ip' | 'lookup_failed' | 'rate_limited' | 'timeout';
-export type IpClassificationType = 'PUBLIC' | 'PRIVATE' | 'LOOPBACK' | 'LINK_LOCAL' | 'RESERVED' | 'INVALID';
+export type IpClassificationType =
+  | 'PUBLIC'
+  | 'PRIVATE'
+  | 'LOOPBACK'
+  | 'LINK_LOCAL'
+  | 'MULTICAST'
+  | 'DOCUMENTATION'
+  | 'RESERVED'
+  | 'UNSPECIFIED'
+  | 'INVALID';
+
+export type GeoLookupStatus =
+  | 'resolved'
+  | 'private_ip'
+  | 'unavailable'
+  | 'rate_limited'
+  | 'lookup_failed'
+  | 'timeout';
+
+export interface NormalizedGeoLocation {
+  ip: string;
+  classification: IpClassificationType;
+  geoAvailable: boolean;
+  country?: string;
+  countryCode?: string;
+  region?: string;
+  city?: string;
+  latitude?: number;
+  longitude?: number;
+  timezone?: string;
+  asn?: string;
+  organization?: string;
+  isp?: string;
+  network?: string;
+  provider?: string;
+  error?: string;
+}
 
 export interface GeoLocationData {
   ip?: string;
@@ -74,12 +109,16 @@ export interface GeoLocationData {
   org?: string;
   organization?: string;
   isp?: string;
+  network?: string;
+  provider?: string;
+  error?: string;
   isPrivate?: boolean;
   isPublic?: boolean;
   geoAvailable?: boolean;
   location?: string | null;
   reason?: string;
   ipType?: IpClassificationType;
+  classification?: IpClassificationType;
   lookupStatus?: GeoLookupStatus;
   statusMessage?: string;
   source?: string;
@@ -115,6 +154,9 @@ export interface RouteHop {
   org?: string;
   organization?: string;
   isp?: string;
+  network?: string;
+  provider?: string;
+  error?: string;
   lookupStatus?: GeoLookupStatus;
   statusMessage?: string;
   geo?: GeoLocationData;

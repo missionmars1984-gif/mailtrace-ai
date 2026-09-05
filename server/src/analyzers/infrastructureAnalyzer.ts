@@ -58,6 +58,9 @@ export class InfrastructureAnalyzer {
         org: geo?.org,
         organization: geo?.organization ?? geo?.org,
         isp: geo?.isp,
+        provider: geo?.provider,
+        error: geo?.error,
+        statusMessage: geo?.statusMessage,
         lookupStatus: geo?.lookupStatus || (isPrivate ? 'private_ip' : 'unavailable'),
         geo,
       };
