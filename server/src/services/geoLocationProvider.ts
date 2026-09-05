@@ -8,26 +8,43 @@ export interface IGeoLocationProvider {
 
 export class GeoLocationProvider implements IGeoLocationProvider {
   /**
-   * Strictly classifies an IP address according to IETF RFC standards.
-   * Classifications:
-   * PUBLIC | PRIVATE | LOOPBACK | LINK_LOCAL | MULTICAST | DOCUMENTATION | RESERVED | UNSPECIFIED | INVALID
+   * Normalizes an IP string:
+   * - strips leading/trailing whitespace
+   * - strips surrounding brackets `[` and `]`
+   * - strips case-insensitive `ipv6:` prefix
+   * - strips IPv4 port number if present (e.g., "192.168.1.1:25")
+   * - converts to lowercase
    */
-  static isPrivateOrReserved(ip: string): { isPrivate: boolean; type: IpClassificationType; reason?: string } {
-    if (!ip || typeof ip !== 'string') {
-      return { isPrivate: true, type: 'INVALID', reason: 'Empty or missing IP' };
-    }
-
-    // Clean IP: strip brackets [ ], leading/trailing whitespace
+  static normalizeIp(ip: string): string {
+    if (!ip || typeof ip !== 'string') return '';
     let clean = ip.trim().replace(/^\[|\]$/g, '').toLowerCase();
-
-    // Strip IPv6 prefix if present (e.g., "ipv6:2001:db8::1" -> "2001:db8::1")
     if (clean.startsWith('ipv6:')) {
       clean = clean.substring(5).trim();
     }
-
-    // Strip port if IPv4 (e.g. 192.168.1.1:25)
+    // Strip port for IPv4 (e.g. 1.2.3.4:80)
     if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}:\d+$/.test(clean)) {
       clean = clean.split(':')[0];
+    }
+    return clean;
+  }
+
+  /**
+   * Validates whether a candidate string is a syntactically valid IPv4 or IPv6 address.
+   */
+  static isValidIp(ip: string): boolean {
+    const clean = this.normalizeIp(ip);
+    return net.isIP(clean) !== 0;
+  }
+
+  /**
+   * Strictly classifies an IP address according to IETF RFC standards.
+   * Possible states:
+   * PUBLIC | PRIVATE | LOOPBACK | LINK_LOCAL | MULTICAST | DOCUMENTATION | RESERVED | UNSPECIFIED | INVALID
+   */
+  static isPrivateOrReserved(ip: string): { isPrivate: boolean; type: IpClassificationType; reason?: string } {
+    const clean = this.normalizeIp(ip);
+    if (!clean) {
+      return { isPrivate: true, type: 'INVALID', reason: 'Empty or missing IP' };
     }
 
     const ipVersion = net.isIP(clean);
@@ -35,22 +52,18 @@ export class GeoLocationProvider implements IGeoLocationProvider {
       return { isPrivate: true, type: 'INVALID', reason: 'Invalid IP address syntax' };
     }
 
-    // 1. IPv4 Classification
-    const ipv4Match = clean.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
-    if (ipv4Match) {
-      const p0 = parseInt(ipv4Match[1], 10);
-      const p1 = parseInt(ipv4Match[2], 10);
-      const p2 = parseInt(ipv4Match[3], 10);
-      const p3 = parseInt(ipv4Match[4], 10);
-
-      // Verify valid octets (0-255)
-      if (p0 > 255 || p1 > 255 || p2 > 255 || p3 > 255) {
-        return { isPrivate: true, type: 'INVALID', reason: 'Octet value exceeds 255' };
+    // 1. IPv4 Classification (32-bit standard blocks)
+    if (ipVersion === 4) {
+      const parts = clean.split('.').map((p) => parseInt(p, 10));
+      if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) {
+        return { isPrivate: true, type: 'INVALID', reason: 'Octet value exceeds 255 or invalid format' };
       }
+
+      const [p0, p1, p2, p3] = parts;
 
       // 0.0.0.0/8 (Current network / RFC 1122 / RFC 6890)
       if (p0 === 0) {
-        return { isPrivate: true, type: 'UNSPECIFIED', reason: 'RFC 1122 Current Network / Unspecified' };
+        return { isPrivate: true, type: 'UNSPECIFIED', reason: 'RFC 1122 Current Network (0.0.0.0/8)' };
       }
 
       // 10.0.0.0/8 (Private-Use / RFC 1918)
@@ -129,8 +142,8 @@ export class GeoLocationProvider implements IGeoLocationProvider {
       return { isPrivate: false, type: 'PUBLIC' };
     }
 
-    // 2. IPv6 Classification
-    if (clean.includes(':')) {
+    // 2. IPv6 Classification (128-bit standard blocks)
+    if (ipVersion === 6) {
       // Loopback (::1)
       if (clean === '::1' || clean === '0:0:0:0:0:0:0:1') {
         return { isPrivate: true, type: 'LOOPBACK', reason: 'RFC 4291 IPv6 Loopback (::1)' };
@@ -144,13 +157,13 @@ export class GeoLocationProvider implements IGeoLocationProvider {
       // IPv4-mapped IPv6 (e.g. ::ffff:192.168.1.1 or ::ffff:203.0.113.1)
       if (clean.startsWith('::ffff:')) {
         const embeddedV4 = clean.substring(7);
-        if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(embeddedV4)) {
+        if (net.isIPv4(embeddedV4)) {
           return this.isPrivateOrReserved(embeddedV4);
         }
       }
 
       // Multicast (ff00::/8 / RFC 4291)
-      if (clean.startsWith('ff') && /^[0-9a-f:]+$/i.test(clean)) {
+      if (clean.startsWith('ff')) {
         return { isPrivate: true, type: 'MULTICAST', reason: 'RFC 4291 IPv6 Multicast (ff00::/8)' };
       }
 
@@ -169,10 +182,7 @@ export class GeoLocationProvider implements IGeoLocationProvider {
         return { isPrivate: true, type: 'DOCUMENTATION', reason: 'RFC 3849 IPv6 Documentation (2001:db8::/32)' };
       }
 
-      // Check standard IPv6 hex character validity
-      if (/^[0-9a-f:]+$/i.test(clean)) {
-        return { isPrivate: false, type: 'PUBLIC' };
-      }
+      return { isPrivate: false, type: 'PUBLIC' };
     }
 
     return { isPrivate: true, type: 'INVALID', reason: 'Unrecognized IP format' };
@@ -184,111 +194,62 @@ export class GeoLocationProvider implements IGeoLocationProvider {
    * Non-public IPs are strictly labeled without external network queries.
    */
   async getLocation(ip: string): Promise<GeoLocationData> {
-    if (!ip || !ip.trim()) {
-      console.log(`[GeoIP] Extracted IP: None`);
-      console.log(`[GeoIP] Classification: INVALID`);
-      console.log(`[GeoIP] Lookup failure: Empty or missing IP`);
-      console.log(`[GeoIP] Parsed country: Location unavailable — invalid IP`);
-      console.log(`[GeoIP] Parsed city: N/A`);
-      console.log(`[GeoIP] Parsed ASN: N/A`);
-      console.log(`[GeoIP] Parsed coordinates: None`);
-
-      return {
-        ip: '',
-        classification: 'INVALID',
-        geoAvailable: false,
-        country: 'Location unavailable — invalid IP',
-        countryCode: undefined,
-        region: undefined,
-        city: undefined,
-        latitude: undefined,
-        longitude: undefined,
-        lat: undefined,
-        lon: undefined,
-        timezone: undefined,
-        asn: undefined,
-        organization: undefined,
-        org: undefined,
-        isp: undefined,
-        network: undefined,
-        provider: undefined,
-        error: 'Empty or missing IP',
-        isPrivate: true,
-        isPublic: false,
-        location: null,
-        reason: 'Empty or missing IP',
-        ipType: 'INVALID',
-        lookupStatus: 'unavailable',
-        statusMessage: 'Location unavailable — invalid IP',
-        source: 'rfc_boundary_filter',
-      };
-    }
-
-    const cleanIp = ip.trim().replace(/^\[|\]$/g, '');
+    const cleanIp = GeoLocationProvider.normalizeIp(ip);
     const classification = GeoLocationProvider.isPrivateOrReserved(cleanIp);
 
-    console.log(`[GeoIP] Extracted IP: ${cleanIp}`);
+    console.log(`[GeoIP] Received header: "${ip}"`);
+    console.log(`[GeoIP] Extracted IP: ${cleanIp || 'None'}`);
+    console.log(`[GeoIP] Normalized IP: ${cleanIp || 'None'}`);
     console.log(`[GeoIP] Classification: ${classification.type}`);
 
-    // CRITICAL RULE: ONLY an IP classified as PUBLIC may be sent to GeoIP.
-    // Non-public IPs (PRIVATE, LOOPBACK, LINK_LOCAL, MULTICAST, DOCUMENTATION, RESERVED, UNSPECIFIED, INVALID)
-    // bypass GeoIP completely.
+    // CRITICAL RULE: ONLY an IP classified as PUBLIC may trigger GeoIP.
+    // Non-public IPs bypass GeoIP completely.
     if (classification.type !== 'PUBLIC') {
-      let reason = 'Non-public/reserved IP';
-      let statusMsg = 'Location unavailable — non-public/reserved IP';
+      let statusMsg = 'Location unavailable — private/internal IP';
+      let errorMsg = classification.reason || 'Private/internal IP';
 
       if (classification.type === 'PRIVATE') {
-        reason = 'Private/internal IP';
         statusMsg = 'Location unavailable — private/internal IP';
+        errorMsg = 'Private/internal IP';
       } else if (classification.type === 'LOOPBACK') {
-        reason = 'Non-public/reserved IP';
-        statusMsg = 'Location unavailable — non-public/reserved IP';
-      } else if (classification.type === 'LINK_LOCAL') {
-        reason = 'Link-local IP';
-        statusMsg = 'Location unavailable — link-local IP';
+        statusMsg = 'Location unavailable — loopback IP';
+        errorMsg = 'Loopback IP address';
       } else if (classification.type === 'DOCUMENTATION') {
-        reason = 'Documentation/test IP';
         statusMsg = 'Location unavailable — documentation/test IP';
-      } else if (classification.type === 'MULTICAST') {
-        reason = 'Multicast IP';
-        statusMsg = 'Location unavailable — multicast IP';
-      } else if (classification.type === 'UNSPECIFIED') {
-        reason = 'Unspecified IP';
-        statusMsg = 'Location unavailable — unspecified IP';
+        errorMsg = 'Documentation IP address';
       } else if (classification.type === 'INVALID') {
-        reason = 'Invalid IP';
-        statusMsg = 'Location unavailable — invalid IP';
+        statusMsg = 'Location unavailable — invalid IP format';
+        errorMsg = 'Invalid IP address syntax';
+      } else {
+        statusMsg = `Location unavailable — ${classification.type.toLowerCase()} IP`;
       }
-
-      console.log(`[GeoIP] Parsed country: ${statusMsg}`);
-      console.log(`[GeoIP] Parsed city: N/A`);
-      console.log(`[GeoIP] Parsed ASN: N/A`);
-      console.log(`[GeoIP] Parsed coordinates: None`);
 
       return {
         ip: cleanIp,
         classification: classification.type,
         geoAvailable: false,
-        country: statusMsg,
-        countryCode: undefined,
-        region: undefined,
-        city: undefined,
-        latitude: undefined,
-        longitude: undefined,
-        lat: undefined,
-        lon: undefined,
-        timezone: undefined,
-        asn: undefined,
-        organization: undefined,
-        org: undefined,
-        isp: undefined,
-        network: undefined,
-        provider: undefined,
-        error: undefined,
+        country: null,
+        countryCode: null,
+        region: null,
+        city: null,
+        postalCode: null,
+        latitude: null,
+        longitude: null,
+        lat: null,
+        lon: null,
+        timezone: null,
+        asn: null,
+        organization: null,
+        org: null,
+        isp: null,
+        network: null,
+        provider: null,
+        lookupTimestamp: new Date().toISOString(),
+        error: errorMsg,
         isPrivate: true,
         isPublic: false,
         location: null,
-        reason,
+        reason: errorMsg,
         ipType: classification.type,
         lookupStatus: classification.type === 'PRIVATE' ? 'private_ip' : 'unavailable',
         statusMessage: statusMsg,
@@ -302,31 +263,29 @@ export class GeoLocationProvider implements IGeoLocationProvider {
     // 1. Check if external GeoIP lookup is explicitly disabled
     if (process.env.DISABLE_GEOIP === 'true') {
       console.log(`[GeoIP] Provider response status: Disabled (DISABLE_GEOIP=true)`);
-      console.log(`[GeoIP] Lookup failure: GeoIP lookup unavailable`);
-      console.log(`[GeoIP] Parsed country: Location unavailable — GeoIP lookup unavailable`);
-      console.log(`[GeoIP] Parsed city: N/A`);
-      console.log(`[GeoIP] Parsed ASN: N/A`);
-      console.log(`[GeoIP] Parsed coordinates: None`);
+      console.log(`[GeoIP] Lookup failed: GeoIP lookup disabled`);
 
       return {
         ip: cleanIp,
         classification: 'PUBLIC',
         geoAvailable: false,
-        country: 'Location unavailable — GeoIP lookup unavailable',
-        countryCode: undefined,
-        region: undefined,
-        city: undefined,
-        latitude: undefined,
-        longitude: undefined,
-        lat: undefined,
-        lon: undefined,
-        timezone: undefined,
-        asn: undefined,
-        organization: undefined,
-        org: undefined,
-        isp: undefined,
-        network: undefined,
+        country: null,
+        countryCode: null,
+        region: null,
+        city: null,
+        postalCode: null,
+        latitude: null,
+        longitude: null,
+        lat: null,
+        lon: null,
+        timezone: null,
+        asn: null,
+        organization: null,
+        org: null,
+        isp: null,
+        network: null,
         provider: 'provider_disabled',
+        lookupTimestamp: new Date().toISOString(),
         error: 'GeoIP lookup disabled',
         isPrivate: false,
         isPublic: true,
@@ -339,44 +298,56 @@ export class GeoLocationProvider implements IGeoLocationProvider {
       };
     }
 
-    // 2. Check local SQLite cache first
+    // 2. Check local SQLite cache first (keyed by normalized public IP)
     try {
       const cached = DatabaseService.getCachedGeoLocation(cleanIp);
-      if (cached) {
-        const hasValidCoords = cached.latitude !== undefined && cached.longitude !== undefined && !(cached.latitude === 0 && cached.longitude === 0);
+      if (cached && cached.country) {
+        const hasValidCoords =
+          typeof cached.latitude === 'number' &&
+          typeof cached.longitude === 'number' &&
+          cached.latitude >= -90 &&
+          cached.latitude <= 90 &&
+          cached.longitude >= -180 &&
+          cached.longitude <= 180 &&
+          !(cached.latitude === 0 && cached.longitude === 0);
+
         console.log(`[GeoIP] Provider response status: Cache hit (SQLite)`);
-        console.log(`[GeoIP] Parsed country: ${cached.country}`);
-        console.log(`[GeoIP] Parsed city: ${cached.city || 'N/A'}`);
-        console.log(`[GeoIP] Parsed ASN: ${cached.asn || 'N/A'}`);
-        console.log(`[GeoIP] Parsed coordinates: ${hasValidCoords ? `${cached.latitude}, ${cached.longitude}` : 'None'}`);
+        console.log(`[GeoIP] Country: ${cached.country}`);
+        console.log(`[GeoIP] City: ${cached.city || 'N/A'}`);
+        console.log(`[GeoIP] ASN: ${cached.asn || 'N/A'}`);
+        console.log(`[GeoIP] Latitude: ${hasValidCoords ? cached.latitude : 'None'}`);
+        console.log(`[GeoIP] Longitude: ${hasValidCoords ? cached.longitude : 'None'}`);
+        console.log(`[GeoIP] Lookup completed`);
 
         return {
           ip: cleanIp,
           classification: 'PUBLIC',
           geoAvailable: hasValidCoords,
           country: cached.country,
-          countryCode: cached.countryCode,
-          region: cached.region,
-          city: cached.city,
-          latitude: cached.latitude ?? cached.lat,
-          longitude: cached.longitude ?? cached.lon,
-          lat: cached.latitude ?? cached.lat,
-          lon: cached.longitude ?? cached.lon,
-          timezone: cached.timezone,
-          asn: cached.asn,
-          organization: cached.organization ?? cached.org,
-          org: cached.organization ?? cached.org,
-          isp: cached.isp,
-          network: cached.network,
+          countryCode: cached.countryCode || null,
+          region: cached.region || null,
+          city: cached.city || null,
+          postalCode: (cached as any).postalCode || null,
+          latitude: hasValidCoords ? cached.latitude : null,
+          longitude: hasValidCoords ? cached.longitude : null,
+          lat: hasValidCoords ? cached.latitude : null,
+          lon: hasValidCoords ? cached.longitude : null,
+          timezone: cached.timezone || null,
+          asn: cached.asn || null,
+          organization: cached.organization || cached.org || null,
+          org: cached.organization || cached.org || null,
+          isp: cached.isp || null,
+          network: cached.network || null,
           provider: cached.provider || 'sqlite_cache',
-          error: undefined,
+          lookupTimestamp: (cached as any).lookupTimestamp || new Date().toISOString(),
+          error: null,
           isPrivate: false,
           isPublic: true,
-          location: cached.location ?? (cached.city ? `${cached.city}, ${cached.country}` : cached.country),
+          location: cached.city ? `${cached.city}, ${cached.country}` : cached.country,
           reason: undefined,
           ipType: 'PUBLIC',
-          lookupStatus: cached.lookupStatus || 'resolved',
-          statusMessage: cached.statusMessage || 'Resolved via live GeoIP provider',
+          lookupStatus: 'resolved',
+          statusMessage: 'Resolved via live GeoIP provider',
           source: 'sqlite_cache',
         };
       }
@@ -385,14 +356,20 @@ export class GeoLocationProvider implements IGeoLocationProvider {
     }
 
     // 3. Fetch live data from real GeoIP service
-    // Uses ip-api.com free tier with strict 4000ms timeout
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 4000);
+    // Primary: ip-api.com
+    // Fallback: ipwho.is
+    const lookupTimeoutMs = 4000;
 
-      const apiUrl = process.env.GEOIP_API_URL
+    // Strategy A: Primary ip-api.com
+    try {
+      const primaryUrl = process.env.GEOIP_API_URL
         ? `${process.env.GEOIP_API_URL.replace(/\/$/, '')}/${encodeURIComponent(cleanIp)}`
-        : `http://ip-api.com/json/${encodeURIComponent(cleanIp)}?fields=status,message,country,countryCode,regionName,city,lat,lon,timezone,isp,org,as,query`;
+        : `http://ip-api.com/json/${encodeURIComponent(cleanIp)}?fields=status,message,country,countryCode,regionName,city,zip,lat,lon,timezone,isp,org,as,query`;
+
+      console.log(`[GeoIP] Provider request: ${primaryUrl}`);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), lookupTimeoutMs);
 
       const headers: Record<string, string> = {
         'User-Agent': 'MailTrace-AI-Forensics/1.0',
@@ -401,130 +378,53 @@ export class GeoLocationProvider implements IGeoLocationProvider {
         headers['Authorization'] = `Bearer ${process.env.GEOIP_API_KEY}`;
       }
 
-      const res = await fetch(apiUrl, {
-        signal: controller.signal,
-        headers,
-      });
-      clearTimeout(timeout);
+      const res = await fetch(primaryUrl, { signal: controller.signal, headers });
+      clearTimeout(timer);
 
-      // Handle HTTP Rate Limiting
-      if (res.status === 429) {
-        console.log(`[GeoIP] Provider response status: HTTP 429`);
-        console.log(`[GeoIP] Lookup failure: Rate limit exceeded`);
-        console.log(`[GeoIP] Parsed country: Location unavailable — GeoIP lookup unavailable`);
-        console.log(`[GeoIP] Parsed city: N/A`);
-        console.log(`[GeoIP] Parsed ASN: N/A`);
-        console.log(`[GeoIP] Parsed coordinates: None`);
-
-        return {
-          ip: cleanIp,
-          classification: 'PUBLIC',
-          geoAvailable: false,
-          country: 'Location unavailable — GeoIP lookup unavailable',
-          countryCode: undefined,
-          region: undefined,
-          city: undefined,
-          latitude: undefined,
-          longitude: undefined,
-          lat: undefined,
-          lon: undefined,
-          timezone: undefined,
-          asn: undefined,
-          organization: undefined,
-          org: undefined,
-          isp: undefined,
-          network: undefined,
-          provider: 'ip-api.com',
-          error: 'Rate limit exceeded',
-          isPrivate: false,
-          isPublic: true,
-          location: null,
-          reason: 'GeoIP lookup unavailable',
-          ipType: 'PUBLIC',
-          lookupStatus: 'rate_limited',
-          statusMessage: 'Location unavailable — GeoIP lookup unavailable',
-          source: 'ip-api.com',
-        };
-      }
+      console.log(`[GeoIP] Provider HTTP status: ${res.status}`);
 
       if (res.ok) {
         const data = (await res.json()) as any;
-
-        // Check provider-level error messages
-        if (data && data.status === 'fail') {
-          console.log(`[GeoIP] Provider response status: Fail (${data.message || 'unknown'})`);
-          console.log(`[GeoIP] Lookup failure: ${data.message || 'Lookup failed'}`);
-          console.log(`[GeoIP] Parsed country: Location unavailable — GeoIP lookup unavailable`);
-          console.log(`[GeoIP] Parsed city: N/A`);
-          console.log(`[GeoIP] Parsed ASN: N/A`);
-          console.log(`[GeoIP] Parsed coordinates: None`);
-
-          return {
-            ip: cleanIp,
-            classification: 'PUBLIC',
-            geoAvailable: false,
-            country: 'Location unavailable — GeoIP lookup unavailable',
-            countryCode: undefined,
-            region: undefined,
-            city: undefined,
-            latitude: undefined,
-            longitude: undefined,
-            lat: undefined,
-            lon: undefined,
-            timezone: undefined,
-            asn: undefined,
-            organization: undefined,
-            org: undefined,
-            isp: undefined,
-            network: undefined,
-            provider: 'ip-api.com',
-            error: data.message || 'Provider lookup failed',
-            isPrivate: false,
-            isPublic: true,
-            location: null,
-            reason: 'GeoIP lookup unavailable',
-            ipType: 'PUBLIC',
-            lookupStatus: 'lookup_failed',
-            statusMessage: 'Location unavailable — GeoIP lookup unavailable',
-            source: 'ip-api.com',
-          };
-        }
+        console.log(`[GeoIP] Provider response received`);
 
         if (data && data.status === 'success') {
-          const lat = typeof data.lat === 'number' && data.lat >= -90 && data.lat <= 90 ? data.lat : undefined;
-          const lon = typeof data.lon === 'number' && data.lon >= -180 && data.lon <= 180 ? data.lon : undefined;
-          const hasValidCoords = lat !== undefined && lon !== undefined && !(lat === 0 && lon === 0);
-          const parsedAsn = data.as ? data.as.split(' ')[0] : undefined;
+          const lat = typeof data.lat === 'number' && !isNaN(data.lat) && data.lat >= -90 && data.lat <= 90 ? data.lat : null;
+          const lon = typeof data.lon === 'number' && !isNaN(data.lon) && data.lon >= -180 && data.lon <= 180 ? data.lon : null;
+          const validCoords = lat !== null && lon !== null && !(lat === 0 && lon === 0);
+          const parsedAsn = data.as ? data.as.split(' ')[0] : null;
 
-          console.log(`[GeoIP] Provider response status: HTTP 200 OK`);
-          console.log(`[GeoIP] Parsed country: ${data.country || 'Unknown Jurisdiction'}`);
-          console.log(`[GeoIP] Parsed city: ${data.city || 'N/A'}`);
-          console.log(`[GeoIP] Parsed ASN: ${parsedAsn || 'N/A'}`);
-          console.log(`[GeoIP] Parsed coordinates: ${hasValidCoords ? `${lat}, ${lon}` : 'None'}`);
+          console.log(`[GeoIP] Country: ${data.country || 'N/A'}`);
+          console.log(`[GeoIP] City: ${data.city || 'N/A'}`);
+          console.log(`[GeoIP] ASN: ${parsedAsn || 'N/A'}`);
+          console.log(`[GeoIP] Latitude: ${validCoords ? lat : 'None'}`);
+          console.log(`[GeoIP] Longitude: ${validCoords ? lon : 'None'}`);
+          console.log(`[GeoIP] Lookup completed`);
 
-          const geoResult: GeoLocationData = {
+          const result: GeoLocationData = {
             ip: cleanIp,
             classification: 'PUBLIC',
-            geoAvailable: hasValidCoords,
-            country: data.country || 'Unknown Jurisdiction',
-            countryCode: data.countryCode || undefined,
-            region: data.regionName || data.country || undefined,
-            city: data.city || undefined,
-            latitude: lat,
-            longitude: lon,
-            lat,
-            lon,
-            timezone: data.timezone || undefined,
+            geoAvailable: validCoords,
+            country: data.country || null,
+            countryCode: data.countryCode || null,
+            region: data.regionName || null,
+            city: data.city || null,
+            postalCode: data.zip || null,
+            latitude: validCoords ? lat : null,
+            longitude: validCoords ? lon : null,
+            lat: validCoords ? lat : null,
+            lon: validCoords ? lon : null,
+            timezone: data.timezone || null,
             asn: parsedAsn,
-            organization: data.org || data.isp || undefined,
-            org: data.org || data.isp || undefined,
-            isp: data.isp || undefined,
-            network: undefined,
+            organization: data.org || null,
+            org: data.org || null,
+            isp: data.isp || null,
+            network: null,
             provider: 'ip-api.com',
-            error: undefined,
+            lookupTimestamp: new Date().toISOString(),
+            error: null,
             isPrivate: false,
             isPublic: true,
-            location: data.country ? `${data.city ? data.city + ', ' : ''}${data.country}` : null,
+            location: data.country ? (data.city ? `${data.city}, ${data.country}` : data.country) : null,
             reason: undefined,
             ipType: 'PUBLIC',
             lookupStatus: 'resolved',
@@ -532,84 +432,123 @@ export class GeoLocationProvider implements IGeoLocationProvider {
             source: 'ip-api.com',
           };
 
-          // Cache in SQLite database
+          // Cache in SQLite
           try {
-            DatabaseService.cacheGeoLocation(cleanIp, geoResult);
-          } catch (cacheErr) {
-            console.warn(`[GeoLocationProvider] Cache write warning for ${cleanIp}:`, cacheErr);
-          }
+            DatabaseService.cacheGeoLocation(cleanIp, result);
+          } catch {}
 
-          return geoResult;
+          return result;
+        } else if (data && data.status === 'fail') {
+          console.log(`[GeoIP] Provider error: ${data.message || 'Lookup failed'}`);
         }
       }
     } catch (err: any) {
-      const isTimeout = err.name === 'AbortError';
-      console.log(`[GeoIP] Provider response status: Exception (${isTimeout ? 'Timeout' : err.message})`);
-      console.log(`[GeoIP] Lookup failure: ${isTimeout ? 'Location lookup timed out after 4000ms' : err.message}`);
-      console.log(`[GeoIP] Parsed country: Location unavailable — GeoIP lookup unavailable`);
-      console.log(`[GeoIP] Parsed city: N/A`);
-      console.log(`[GeoIP] Parsed ASN: N/A`);
-      console.log(`[GeoIP] Parsed coordinates: None`);
-
-      return {
-        ip: cleanIp,
-        classification: 'PUBLIC',
-        geoAvailable: false,
-        country: 'Location unavailable — GeoIP lookup unavailable',
-        countryCode: undefined,
-        region: undefined,
-        city: undefined,
-        latitude: undefined,
-        longitude: undefined,
-        lat: undefined,
-        lon: undefined,
-        timezone: undefined,
-        asn: undefined,
-        organization: undefined,
-        org: undefined,
-        isp: undefined,
-        network: undefined,
-        provider: 'ip-api.com',
-        error: isTimeout ? 'Timeout' : err.message,
-        isPrivate: false,
-        isPublic: true,
-        location: null,
-        reason: 'GeoIP lookup unavailable',
-        ipType: 'PUBLIC',
-        lookupStatus: isTimeout ? 'timeout' : 'lookup_failed',
-        statusMessage: 'Location unavailable — GeoIP lookup unavailable',
-        source: isTimeout ? 'timeout' : 'lookup_failed',
-      };
+      console.log(`[GeoIP] Provider error: ${err.message || err}`);
     }
 
-    // 4. Return graceful unresolved public state without inventing coordinates
-    console.log(`[GeoIP] Provider response status: Fallback Unresolved`);
-    console.log(`[GeoIP] Lookup failure: Location lookup unavailable`);
-    console.log(`[GeoIP] Parsed country: Location unavailable — GeoIP lookup unavailable`);
-    console.log(`[GeoIP] Parsed city: N/A`);
-    console.log(`[GeoIP] Parsed ASN: N/A`);
-    console.log(`[GeoIP] Parsed coordinates: None`);
+    // Strategy B: Fallback to ipwho.is if primary is rate limited or unavailable
+    try {
+      const fallbackUrl = `https://ipwho.is/${encodeURIComponent(cleanIp)}`;
+      console.log(`[GeoIP] Provider request (fallback): ${fallbackUrl}`);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), lookupTimeoutMs);
+
+      const res = await fetch(fallbackUrl, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'MailTrace-AI-Forensics/1.0' },
+      });
+      clearTimeout(timer);
+
+      console.log(`[GeoIP] Provider HTTP status (fallback): ${res.status}`);
+
+      if (res.ok) {
+        const data = (await res.json()) as any;
+        console.log(`[GeoIP] Provider response received (fallback)`);
+
+        if (data && data.success) {
+          const lat = typeof data.latitude === 'number' && !isNaN(data.latitude) && data.latitude >= -90 && data.latitude <= 90 ? data.latitude : null;
+          const lon = typeof data.longitude === 'number' && !isNaN(data.longitude) && data.longitude >= -180 && data.longitude <= 180 ? data.longitude : null;
+          const validCoords = lat !== null && lon !== null && !(lat === 0 && lon === 0);
+          const asnStr = data.connection?.asn ? `AS${data.connection.asn}` : null;
+
+          console.log(`[GeoIP] Country: ${data.country || 'N/A'}`);
+          console.log(`[GeoIP] City: ${data.city || 'N/A'}`);
+          console.log(`[GeoIP] ASN: ${asnStr || 'N/A'}`);
+          console.log(`[GeoIP] Latitude: ${validCoords ? lat : 'None'}`);
+          console.log(`[GeoIP] Longitude: ${validCoords ? lon : 'None'}`);
+          console.log(`[GeoIP] Lookup completed`);
+
+          const result: GeoLocationData = {
+            ip: cleanIp,
+            classification: 'PUBLIC',
+            geoAvailable: validCoords,
+            country: data.country || null,
+            countryCode: data.country_code || null,
+            region: data.region || null,
+            city: data.city || null,
+            postalCode: data.postal || null,
+            latitude: validCoords ? lat : null,
+            longitude: validCoords ? lon : null,
+            lat: validCoords ? lat : null,
+            lon: validCoords ? lon : null,
+            timezone: data.timezone?.id || null,
+            asn: asnStr,
+            organization: data.connection?.org || null,
+            org: data.connection?.org || null,
+            isp: data.connection?.isp || null,
+            network: null,
+            provider: 'ipwho.is',
+            lookupTimestamp: new Date().toISOString(),
+            error: null,
+            isPrivate: false,
+            isPublic: true,
+            location: data.country ? (data.city ? `${data.city}, ${data.country}` : data.country) : null,
+            reason: undefined,
+            ipType: 'PUBLIC',
+            lookupStatus: 'resolved',
+            statusMessage: 'Resolved via live GeoIP provider',
+            source: 'ipwho.is',
+          };
+
+          // Cache in SQLite
+          try {
+            DatabaseService.cacheGeoLocation(cleanIp, result);
+          } catch {}
+
+          return result;
+        }
+      }
+    } catch (err: any) {
+      console.log(`[GeoIP] Provider error (fallback): ${err.message || err}`);
+    }
+
+    // 4. Fallback when GeoIP lookup is unavailable (Section 13)
+    console.log(`[GeoIP] Lookup failed: GeoIP lookup unavailable`);
+    console.log(`[GeoIP] Parse error: All live GeoIP providers failed or timed out`);
 
     return {
       ip: cleanIp,
       classification: 'PUBLIC',
       geoAvailable: false,
-      country: 'Location unavailable — GeoIP lookup unavailable',
-      countryCode: undefined,
-      region: undefined,
-      city: undefined,
-      latitude: undefined,
-      longitude: undefined,
-      lat: undefined,
-      lon: undefined,
-      timezone: undefined,
-      asn: undefined,
-      organization: undefined,
-      org: undefined,
-      isp: undefined,
-      network: undefined,
-      provider: 'unresolved',
-      error: 'Unresolved',
+      country: null,
+      countryCode: null,
+      region: null,
+      city: null,
+      postalCode: null,
+      latitude: null,
+      longitude: null,
+      lat: null,
+      lon: null,
+      timezone: null,
+      asn: null,
+      organization: null,
+      org: null,
+      isp: null,
+      network: null,
+      provider: 'unavailable',
+      lookupTimestamp: new Date().toISOString(),
+      error: 'GeoIP lookup unavailable',
       isPrivate: false,
       isPublic: true,
       location: null,
@@ -617,10 +556,9 @@ export class GeoLocationProvider implements IGeoLocationProvider {
       ipType: 'PUBLIC',
       lookupStatus: 'lookup_failed',
       statusMessage: 'Location unavailable — GeoIP lookup unavailable',
-      source: 'unresolved',
+      source: 'unavailable',
     };
   }
 }
 
 export const geoProvider = new GeoLocationProvider();
-

@@ -635,7 +635,17 @@ export class DatabaseService {
         const lon = geo?.lon;
 
         // Valid public geolocated coordinate
-        if (lat !== undefined && lon !== undefined && !(lat === 0 && lon === 0)) {
+        if (
+          typeof lat === 'number' &&
+          typeof lon === 'number' &&
+          !isNaN(lat) &&
+          !isNaN(lon) &&
+          lat >= -90 &&
+          lat <= 90 &&
+          lon >= -180 &&
+          lon <= 180 &&
+          !(lat === 0 && lon === 0)
+        ) {
           if (geo?.country) jurisdictionsSet.add(geo.country);
           if (geo?.asn) autonomousSystemsSet.add(geo.asn);
 
@@ -644,14 +654,14 @@ export class DatabaseService {
             map.set(ip, {
               ip,
               country: geo?.country || 'Unknown Jurisdiction',
-              countryCode: geo?.countryCode,
-              region: geo?.region,
-              city: geo?.city,
+              countryCode: geo?.countryCode || undefined,
+              region: geo?.region || undefined,
+              city: geo?.city || undefined,
               lat,
               lon,
-              isp: geo?.isp || geo?.org,
-              asn: geo?.asn,
-              org: geo?.org,
+              isp: geo?.isp || geo?.org || undefined,
+              asn: geo?.asn || undefined,
+              org: geo?.org || undefined,
               isPrivate: false,
               caseCount: 1,
               riskScore: c.riskScore,

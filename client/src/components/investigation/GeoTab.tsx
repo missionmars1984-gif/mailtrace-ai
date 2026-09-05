@@ -47,8 +47,18 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
   const lookupStatus = activeHop?.lookupStatus || geo?.lookupStatus || (isPrivate ? 'private_ip' : 'unavailable');
 
   // Convert lat/long to SVG percentages (Mercator projection approximation)
-  const getCoordinates = (lat?: number, lon?: number) => {
-    if (lat === undefined || lon === undefined || (lat === 0 && lon === 0) || isNaN(lat) || isNaN(lon)) {
+  const getCoordinates = (lat?: number | null, lon?: number | null) => {
+    if (
+      typeof lat !== 'number' ||
+      typeof lon !== 'number' ||
+      isNaN(lat) ||
+      isNaN(lon) ||
+      lat < -90 ||
+      lat > 90 ||
+      lon < -180 ||
+      lon > 180 ||
+      (lat === 0 && lon === 0)
+    ) {
       return { x: 50, y: 50, valid: false };
     }
     const x = ((lon + 180) / 360) * 100;
@@ -68,14 +78,15 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
       const lon = h.longitude ?? h.lon ?? h.geo?.longitude ?? h.geo?.lon;
       const isHopPrivate = Boolean(h.isPrivate);
       const isHopGeoAvailable = Boolean(h.geoAvailable ?? h.geo?.geoAvailable ?? (h.lookupStatus === 'resolved' || h.geo?.lookupStatus === 'resolved'));
+      const pCoords = getCoordinates(lat, lon);
       return {
         hop: h,
         idx,
-        coords: getCoordinates(lat, lon),
-        isPlottable: !isHopPrivate && isHopGeoAvailable,
+        coords: pCoords,
+        isPlottable: !isHopPrivate && isHopGeoAvailable && pCoords.valid,
       };
     })
-    .filter((item) => item.coords.valid && item.isPlottable);
+    .filter((item) => item.isPlottable);
 
   return (
     <div className="space-y-6">
@@ -226,7 +237,7 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
               <div className="w-4 h-4 rounded-full bg-red-600 border-2 border-white shadow-lg shadow-red-500/50 flex items-center justify-center text-white" />
               <div className="mt-1 px-2.5 py-1 rounded bg-slate-900/95 text-white text-[11px] font-mono border border-slate-700 shadow-lg whitespace-nowrap flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-red-500" />
-                <strong>Hop #{activeHop?.hopNumber}:</strong> {geo?.city ? `${geo.city}, ` : ''}{geo?.country} ({geo?.lat?.toFixed(2)}°, {geo?.lon?.toFixed(2)}°)
+                <strong>Hop #{activeHop?.hopNumber}:</strong> {geo?.city || activeHop?.city ? `${geo?.city || activeHop?.city}, ` : ''}{geo?.country || activeHop?.country} ({typeof hopLat === 'number' ? hopLat.toFixed(2) : ''}°, {typeof hopLon === 'number' ? hopLon.toFixed(2) : ''}°)
               </div>
             </div>
           )}
@@ -329,7 +340,7 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
             <span className="font-mono font-bold text-slate-900 text-sm block">
               {isPrivate ? 'RFC1918' : (geoAvailable ? (geo?.asn || activeHop?.asn || 'Unassigned') : 'N/A')}
             </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5 truncate" title={geo?.org || geo?.organization || geo?.isp || activeHop?.org || activeHop?.organization}>
+            <span className="text-[10px] text-slate-400 block mt-0.5 truncate" title={(geo?.org || geo?.organization || geo?.isp || activeHop?.org || activeHop?.organization) ?? undefined}>
               {isPrivate
                 ? 'Internal Enterprise Cluster'
                 : (geoAvailable ? (geo?.org || geo?.organization || geo?.isp || activeHop?.org || activeHop?.organization || 'Unavailable') : 'N/A')}

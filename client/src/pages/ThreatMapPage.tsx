@@ -107,7 +107,19 @@ export const ThreatMapPage: React.FC = () => {
     markersLayerRef.current.clearLayers();
 
     mapData.nodes.forEach((node) => {
-      if (typeof node.lat !== 'number' || typeof node.lon !== 'number') return;
+      if (
+        typeof node.lat !== 'number' ||
+        typeof node.lon !== 'number' ||
+        isNaN(node.lat) ||
+        isNaN(node.lon) ||
+        node.lat < -90 ||
+        node.lat > 90 ||
+        node.lon < -180 ||
+        node.lon > 180 ||
+        (node.lat === 0 && node.lon === 0)
+      ) {
+        return;
+      }
 
       const markerColor =
         node.riskScore >= 80 ? '#EF4444' : node.riskScore >= 55 ? '#F59E0B' : '#10B981';

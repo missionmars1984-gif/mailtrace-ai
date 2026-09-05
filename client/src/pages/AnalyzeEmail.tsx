@@ -618,7 +618,7 @@ export const AnalyzeEmail: React.FC = () => {
                           `${hop.geo?.city ? hop.geo.city + ', ' : ''}${hop.geo?.country || 'Unknown'}`
                         )}
                       </td>
-                      <td className="py-2.5 px-3 text-[#68809F] max-w-[220px] truncate" title={hop.geo?.org}>
+                      <td className="py-2.5 px-3 text-[#68809F] max-w-[220px] truncate" title={hop.geo?.org || undefined}>
                         {hop.geo?.asn ? `${hop.geo.asn} (${hop.geo.org || hop.geo.isp || 'Provider'})` : 'Internal Subnet'}
                       </td>
                     </tr>
