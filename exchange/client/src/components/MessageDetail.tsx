@@ -7,7 +7,8 @@ import {
   Mail, 
   Download, 
   Paperclip, 
-  FileText
+  FileText,
+  Shield
 } from 'lucide-react';
 import type { ExchangeMessage } from '../types';
 
@@ -27,6 +28,34 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
   onMarkUnread,
 }) => {
   const [viewMode, setViewMode] = useState<'html' | 'text' | 'raw'>('html');
+  const [forwarding, setForwarding] = useState(false);
+  const [localCaseId, setLocalCaseId] = useState<string | undefined>(message?.caseId);
+  const [localRiskScore, setLocalRiskScore] = useState<number | undefined>(message?.riskScore);
+  const [localClassification, setLocalClassification] = useState<string | undefined>(message?.threatClassification);
+
+  React.useEffect(() => {
+    setLocalCaseId(message?.caseId);
+    setLocalRiskScore(message?.riskScore);
+    setLocalClassification(message?.threatClassification);
+  }, [message?.id, message?.caseId, message?.riskScore, message?.threatClassification]);
+
+  const handleForwardToSoc = async () => {
+    if (!message) return;
+    setForwarding(true);
+    try {
+      const res = await fetch(`/api/messages/${message.id}/forward-soc`, { method: 'POST' });
+      const data = await res.json();
+      if (data.success && data.message) {
+        setLocalCaseId(data.message.caseId);
+        setLocalRiskScore(data.message.riskScore);
+        setLocalClassification(data.message.threatClassification);
+      }
+    } catch (err) {
+      console.error('Failed to forward to SOC:', err);
+    } finally {
+      setForwarding(false);
+    }
+  };
 
   if (!message) {
     return (
@@ -128,6 +157,33 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
             </button>
           </div>
 
+          {/* Analyze / View in SOC Button */}
+          {localCaseId ? (
+            <button
+              onClick={() => {
+                const socUrl = window.location.hostname.includes('onrender.com')
+                  ? `https://mailtrace-ai-1.onrender.com/investigate?caseId=${localCaseId}`
+                  : `http://localhost:5000/investigate?caseId=${localCaseId}`;
+                window.open(socUrl, '_blank');
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-700 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded shadow-2xs transition-colors cursor-pointer"
+              title="Open full forensic threat investigation in MailTrace SOC"
+            >
+              <Shield className="w-3.5 h-3.5 text-blue-600" />
+              <span>View in SOC</span>
+            </button>
+          ) : (
+            <button
+              onClick={handleForwardToSoc}
+              disabled={forwarding}
+              className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 rounded shadow-2xs transition-colors cursor-pointer disabled:opacity-60"
+              title="Send email to MailTrace AI SOC Threat Intelligence"
+            >
+              <Shield className={`w-3.5 h-3.5 text-indigo-600 ${forwarding ? 'animate-spin' : ''}`} />
+              <span>{forwarding ? 'Analyzing...' : 'Send to SOC'}</span>
+            </button>
+          )}
+
           {/* Download Raw EML */}
           <a
             href={`/api/messages/${message.id}/raw`}
@@ -144,12 +200,12 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
       {/* Message Header Information */}
       <div className="p-6 border-b border-slate-200 select-text">
         {/* Security & Delivery Assessment Banner */}
-        {typeof message.riskScore === 'number' ? (
+        {typeof localRiskScore === 'number' ? (
           <div
             className={`mb-4 px-3 py-2 rounded-md border flex items-center justify-between text-xs ${
-              message.riskScore >= 60
+              localRiskScore >= 60
                 ? 'bg-red-50 border-red-200 text-red-800'
-                : message.riskScore >= 30
+                : localRiskScore >= 30
                 ? 'bg-amber-50 border-amber-200 text-amber-800'
                 : 'bg-emerald-50/70 border-emerald-200 text-emerald-800'
             }`}
@@ -157,30 +213,39 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
             <div className="flex items-center gap-2 font-medium">
               <span
                 className={`w-2 h-2 rounded-full ${
-                  message.riskScore >= 60
+                  localRiskScore >= 60
                     ? 'bg-red-600 animate-pulse'
-                    : message.riskScore >= 30
+                    : localRiskScore >= 30
                     ? 'bg-amber-500'
                     : 'bg-emerald-500'
                 }`}
               />
               <span>
-                {message.riskScore >= 60
-                  ? `Threat Detected: ${message.threatClassification || 'Malicious / Suspicious'}`
-                  : message.riskScore >= 30
-                  ? `Warning: ${message.threatClassification || 'Suspicious Indicators'}`
+                {localRiskScore >= 60
+                  ? `Threat Detected: ${localClassification || 'Malicious / Suspicious'}`
+                  : localRiskScore >= 30
+                  ? `Warning: ${localClassification || 'Suspicious Indicators'}`
                   : 'MailTrace Security Verified: Clean'}
               </span>
-              <span className="font-mono text-[11px] opacity-80">(Risk Score: {message.riskScore}/100)</span>
+              <span className="font-mono text-[11px] opacity-80">(Risk Score: {localRiskScore}/100)</span>
             </div>
             <div className="flex items-center gap-2">
               {message.deliveryStatus && (
                 <span className="text-[11px] font-medium opacity-80">{message.deliveryStatus}</span>
               )}
-              {message.caseId && (
-                <span className="font-mono text-[11px] font-semibold bg-white/80 px-2 py-0.5 rounded border border-current">
-                  Case {message.caseId}
-                </span>
+              {localCaseId && (
+                <button
+                  onClick={() => {
+                    const socUrl = window.location.hostname.includes('onrender.com')
+                      ? `https://mailtrace-ai-1.onrender.com/investigate?caseId=${localCaseId}`
+                      : `http://localhost:5000/investigate?caseId=${localCaseId}`;
+                    window.open(socUrl, '_blank');
+                  }}
+                  className="font-mono text-[11px] font-semibold bg-white/80 hover:bg-white px-2 py-0.5 rounded border border-current cursor-pointer transition-colors"
+                  title="Click to view full SOC Case investigation"
+                >
+                  Case {localCaseId} ↗
+                </button>
               )}
             </div>
           </div>

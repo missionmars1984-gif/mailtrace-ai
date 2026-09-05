@@ -1,6 +1,7 @@
 import { SMTPServer } from 'smtp-server';
 import { simpleParser } from 'mailparser';
 import { ExchangeDatabase } from '../db/database.js';
+import { MailboxService } from './mailboxService.js';
 import type { ExchangeMessage } from '../types/index.js';
 
 export class EmbeddedSmtpServer {
@@ -77,17 +78,8 @@ export class EmbeddedSmtpServer {
                 ExchangeDatabase.saveMessage(message, attachments);
                 console.log(`[Embedded SMTP] Successfully accepted and saved message "${message.subject}" into Inbox`);
 
-                // Auto-forward to SOC threat analysis backend if configured
-                const socUrl = process.env.SOC_BACKEND_URL?.trim();
-                if (socUrl) {
-                  try {
-                    fetch(socUrl, {
-                      method: 'POST',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ rawEmail: rawSource }),
-                    }).catch(() => {});
-                  } catch {}
-                }
+                // Automatically forward to SOC threat analysis backend & enrich with risk score
+                MailboxService.forwardToSocAndEnrich(rawSource, message.id);
 
                 callback(null); // Accept message with 250 OK
               } catch (err: any) {

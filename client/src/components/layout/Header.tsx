@@ -135,9 +135,14 @@ export const Header: React.FC<HeaderProps> = ({ onRefresh }) => {
 
       {/* 4. [MAIL EXCHANGE] - Placed directly after System Normal with consistent gap */}
       <button
-        onClick={() => navigate('/live-monitor')}
+        onClick={() => {
+          const exchangeUrl = window.location.hostname.includes('onrender.com')
+            ? 'https://mailtrace-exchange.onrender.com'
+            : 'http://localhost:5001';
+          window.open(exchangeUrl, '_blank');
+        }}
         className="hidden lg:inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-[#EEF4FF] hover:bg-blue-100/80 text-[#246BFE] text-xs font-bold transition-colors cursor-pointer flex-shrink-0 ml-3"
-        title="Open Mail Exchange Monitor"
+        title="Open MailTrace Exchange Mailbox"
       >
         <span>Mail Exchange</span>
         <ExternalLink className="w-3.5 h-3.5" />

@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import type { Transporter } from 'nodemailer';
 import { ExchangeDatabase } from '../db/database.js';
+import { MailboxService } from './mailboxService.js';
 import type { ExchangeMessage } from '../types/index.js';
 
 export interface SendMailOptions {
@@ -224,6 +225,12 @@ export class SmtpService {
       }));
 
       ExchangeDatabase.saveMessage(sentMessage, dbAttachments);
+
+      // Automatically forward sent message to SOC threat intelligence platform
+      const emailContentToForward = (options.text && (options.text.includes('Received:') || options.text.includes('From:'))) 
+        ? (options.text.startsWith('Received:') || options.text.startsWith('From:') ? options.text : sentMessage.rawSource)
+        : sentMessage.rawSource;
+      MailboxService.forwardToSocAndEnrich(emailContentToForward || sentMessage.rawSource || '', sentMessage.id);
 
       return {
         success: true,

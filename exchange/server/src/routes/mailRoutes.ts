@@ -245,3 +245,20 @@ mailRouter.post('/ingest', async (req: Request, res: Response) => {
     return res.status(500).json({ error: err.message || 'Failed to ingest raw email.' });
   }
 });
+
+// POST /api/messages/:id/forward-soc - Trigger forwarding of any message to SOC threat analysis
+mailRouter.post('/messages/:id/forward-soc', async (req: Request, res: Response) => {
+  try {
+    const msg = ExchangeDatabase.getMessageById(String(req.params.id));
+    if (!msg) {
+      return res.status(404).json({ error: 'Message not found.' });
+    }
+    const raw = ExchangeDatabase.getRawSource(String(req.params.id)) || msg.text || '';
+    const forwarded = await MailboxService.forwardToSocAndEnrich(raw, String(req.params.id));
+    const updated = ExchangeDatabase.getMessageById(String(req.params.id));
+    return res.json({ success: forwarded, message: updated });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message || 'Failed to forward email to SOC.' });
+  }
+});
+

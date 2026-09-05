@@ -366,35 +366,55 @@ export class MailboxService {
    * Forwards the unedited raw RFC822 email to the MailTrace SOC backend for automatic AI analysis.
    * Updates the canonical message record with risk score, risk level, classification, and caseId.
    */
-  static async forwardToSocAndEnrich(rawEmail: string, localId: string): Promise<void> {
-    const socUrl = (process.env.SOC_BACKEND_URL || 'http://localhost:5000/api/ingest/email').trim();
+  static async forwardToSocAndEnrich(rawEmail: string, localId: string): Promise<boolean> {
+    if (!rawEmail || !rawEmail.trim()) return false;
 
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 6000);
-      const res = await fetch(socUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ rawEmail }),
-        signal: controller.signal,
-      });
-      clearTimeout(timeout);
-
-      if (res.ok) {
-        const data: any = await res.json();
-        if (data.success && typeof data.riskScore === 'number') {
-          ExchangeDatabase.updateThreatScore(
-            localId,
-            data.riskScore,
-            data.riskLevel || 'Clean',
-            data.classification || 'Clean',
-            data.caseId || data.caseNumber
-          );
-        }
-      }
-    } catch {
-      // SOC failures do not disrupt mail client flow
+    // Determine target SOC endpoints in priority order
+    const candidateUrls: string[] = [];
+    if (process.env.SOC_BACKEND_URL?.trim()) {
+      candidateUrls.push(process.env.SOC_BACKEND_URL.trim());
     }
+    // Cloud Render endpoint
+    candidateUrls.push('https://mailtrace-ai-1.onrender.com/api/ingest/email');
+    // Local endpoints
+    candidateUrls.push('http://127.0.0.1:5000/api/ingest/email');
+    candidateUrls.push('http://localhost:5000/api/ingest/email');
+
+    // Remove duplicates
+    const uniqueUrls = Array.from(new Set(candidateUrls));
+
+    for (const socUrl of uniqueUrls) {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 7000);
+        const res = await fetch(socUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ rawEmail }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+
+        if (res.ok) {
+          const data: any = await res.json();
+          if (data.success && typeof data.riskScore === 'number') {
+            ExchangeDatabase.updateThreatScore(
+              localId,
+              data.riskScore,
+              data.riskLevel || 'Clean',
+              data.classification || 'Clean',
+              data.caseId || data.caseNumber
+            );
+            console.log(`[SOC Forward] Successfully forwarded message "${localId}" to SOC (${socUrl}): Case ${data.caseNumber || data.caseId}, Risk ${data.riskScore}/100 (${data.classification})`);
+            return true;
+          }
+        }
+      } catch (err: any) {
+        // Try next candidate endpoint
+      }
+    }
+
+    return false;
   }
 
   /**

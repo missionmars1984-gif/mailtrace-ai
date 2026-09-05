@@ -18,3 +18,5 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22.13.0
+      - key: SOC_BACKEND_URL
+        value: https://mailtrace-ai-1.onrender.com/api/ingest/email
