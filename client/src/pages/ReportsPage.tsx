@@ -73,14 +73,24 @@ export const ReportsPage: React.FC = () => {
             Tamper-evident investigative dossiers sealed with cryptographic SHA-256 integrity hashes for legal chain of custody.
           </p>
         </div>
-        <button
-          onClick={loadReports}
-          disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-[#E5E9F2] text-[#0B1F3A] hover:bg-slate-50 rounded-xl text-xs font-semibold shadow-2xs transition-colors self-start sm:self-auto"
-        >
-          <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#246BFE]' : ''}`} />
-          <span>Refresh Dossiers</span>
-        </button>
+        <div className="flex items-center gap-2.5 self-start sm:self-auto">
+          <a
+            href="/report.pdf"
+            download="MAILTRACE_COMPREHENSIVE_PROJECT_REPORT.pdf"
+            className="inline-flex items-center gap-1.5 px-4 py-2 bg-linear-to-r from-[#1E3A8A] to-[#246BFE] hover:from-[#0B1F3A] hover:to-[#1D4ED8] text-white rounded-xl text-xs font-semibold shadow-xs transition-all cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Download Project Report (PDF)</span>
+          </a>
+          <button
+            onClick={loadReports}
+            disabled={loading}
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-white border border-[#E5E9F2] text-[#0B1F3A] hover:bg-slate-50 rounded-xl text-xs font-semibold shadow-2xs transition-colors"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-[#246BFE]' : ''}`} />
+            <span>Refresh Dossiers</span>
+          </button>
+        </div>
       </div>
 
       {/* Reports Table Required by Section 25 */}

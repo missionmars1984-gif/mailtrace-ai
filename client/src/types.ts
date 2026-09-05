@@ -42,11 +42,18 @@ export interface GeoLocationData {
   city?: string;
   lat?: number;
   lon?: number;
+  latitude?: number;
+  longitude?: number;
   timezone?: string;
   asn?: string;
   org?: string;
+  organization?: string;
   isp?: string;
   isPrivate?: boolean;
+  isPublic?: boolean;
+  geoAvailable?: boolean;
+  location?: string | null;
+  reason?: string;
   ipType?: IpClassificationType;
   lookupStatus?: GeoLookupStatus;
   statusMessage?: string;
@@ -62,19 +69,29 @@ export interface RouteHop {
   timestamp?: string;
   delayMs?: number;
   isPrivate?: boolean;
+  isPublic?: boolean;
+  geoAvailable?: boolean;
+  location?: string | null;
+  reason?: string;
   isOrigin?: boolean;
   isPublicOriginRelay?: boolean;
   ipType?: IpClassificationType;
   classification?: IpClassificationType;
   rawHopText?: string;
   country?: string;
+  countryCode?: string;
   region?: string;
   city?: string;
   lat?: number;
   lon?: number;
+  latitude?: number;
+  longitude?: number;
   asn?: string;
   org?: string;
+  organization?: string;
+  isp?: string;
   lookupStatus?: GeoLookupStatus;
+  statusMessage?: string;
   geo?: GeoLocationData;
 }
 

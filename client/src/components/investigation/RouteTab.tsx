@@ -140,16 +140,18 @@ export const RouteTab: React.FC<RouteTabProps> = ({ caseData }) => {
                         <span className="text-slate-700 font-sans break-all">
                           {hop.isPrivate ? (
                             <span className="text-amber-700 font-medium">
-                              Geolocation unavailable — private/internal IP
+                              Location unavailable — private/internal IP
                             </span>
-                          ) : (hop.geo?.country || hop.country) ? (
+                          ) : (hop.geoAvailable || hop.geo?.geoAvailable || hop.geo?.lookupStatus === 'resolved' || hop.lookupStatus === 'resolved') ? (
                             <span className="flex items-center gap-1.5">
                               <MapPin className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
                               {(hop.geo?.city || hop.city) ? `${hop.geo?.city || hop.city}, ` : ''}{hop.geo?.country || hop.country}
                               {(hop.geo?.asn || hop.asn) && <span className="font-mono text-slate-500">({hop.geo?.asn || hop.asn})</span>}
                             </span>
                           ) : (
-                            'N/A (Local / Unresolved)'
+                            <span className="text-slate-500">
+                              Location unavailable — GeoIP lookup unavailable
+                            </span>
                           )}
                         </span>
                       </div>

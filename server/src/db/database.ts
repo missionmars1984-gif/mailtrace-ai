@@ -263,19 +263,32 @@ export class DatabaseService {
         return null;
       }
 
+      const lat = typeof row.lat === 'number' ? row.lat : undefined;
+      const lon = typeof row.lon === 'number' ? row.lon : undefined;
+      const isPrivate = Boolean(row.is_private);
+      const isResolved = row.lookup_status === 'resolved';
+      const geoAvailable = isResolved && lat !== undefined && lon !== undefined && !(lat === 0 && lon === 0);
+
       return {
         ip: row.ip,
         country: row.country,
         countryCode: row.country_code || undefined,
         region: row.region || undefined,
         city: row.city || undefined,
-        lat: typeof row.lat === 'number' ? row.lat : undefined,
-        lon: typeof row.lon === 'number' ? row.lon : undefined,
+        lat,
+        lon,
+        latitude: lat,
+        longitude: lon,
         timezone: row.timezone || undefined,
         isp: row.isp || undefined,
         org: row.org || undefined,
+        organization: row.org || row.isp || undefined,
         asn: row.asn || undefined,
-        isPrivate: Boolean(row.is_private),
+        isPrivate,
+        isPublic: !isPrivate,
+        geoAvailable,
+        location: row.city ? `${row.city}, ${row.country}` : row.country,
+        reason: isPrivate ? 'Private/internal IP' : undefined,
         ipType: row.ip_type,
         lookupStatus: row.lookup_status || 'resolved',
         statusMessage: row.status_message || undefined,

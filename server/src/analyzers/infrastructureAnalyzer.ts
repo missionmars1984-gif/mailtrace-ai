@@ -33,19 +33,31 @@ export class InfrastructureAnalyzer {
 
       const classification = geo?.ipType || hop.ipType || (isPrivate ? 'PRIVATE' : (ip ? 'PUBLIC' : 'INVALID'));
 
+      const isPublic = !isPrivate && Boolean(ip);
+      const geoAvailable = Boolean(geo?.geoAvailable ?? (geo?.lat !== undefined && geo?.lon !== undefined && geo?.lookupStatus === 'resolved'));
+
       const enriched: RouteHop = {
         ...hop,
         hostname: hop.hostname || (hop.from ? hop.from.split(/\s+/)[0].trim() : undefined),
         isPrivate,
+        isPublic,
+        geoAvailable,
+        location: geo?.location ?? null,
+        reason: geo?.reason,
         ipType: classification,
         classification,
         country: geo?.country,
+        countryCode: geo?.countryCode,
         region: geo?.region,
         city: geo?.city,
         lat: geo?.lat,
         lon: geo?.lon,
+        latitude: geo?.latitude ?? geo?.lat,
+        longitude: geo?.longitude ?? geo?.lon,
         asn: geo?.asn,
         org: geo?.org,
+        organization: geo?.organization ?? geo?.org,
+        isp: geo?.isp,
         lookupStatus: geo?.lookupStatus || (isPrivate ? 'private_ip' : 'unavailable'),
         geo,
       };
@@ -84,17 +96,17 @@ export class InfrastructureAnalyzer {
           severity: 'CRITICAL',
           title: 'Anonymizing Tor / Proxy Relay Origin',
           source: 'Infrastructure',
-          observed: `Origin infrastructure: ${publicOriginHop.ip} (${geo?.org || geo?.isp || 'Tor Exit Node'})`,
-          impact: 'Sender routed transmission through an anonymized proxy network to obfuscate origin infrastructure. IP geolocation represents observed infrastructure and does not establish the physical location or identity of the sender.',
+          observed: `Observed mail infrastructure location: ${publicOriginHop.ip} (${geo?.org || geo?.isp || 'Tor Exit Node'})`,
+          impact: 'Sender routed transmission through an anonymized proxy network to obfuscate origin infrastructure. GeoIP shows the observable infrastructure associated with the email route. It does not establish the attacker\'s physical identity or exact location.',
         });
       } else {
         findings.push({
           type: 'INFRASTRUCTURE',
           severity: 'INFO',
-          title: 'Observed Public Infrastructure Relay',
+          title: 'Observed Mail Infrastructure Location',
           source: 'Infrastructure',
-          observed: `Observed public origin relay: ${publicOriginHop.ip} [${geo?.city ? geo.city + ', ' : ''}${geo?.country || 'Unknown'}] (${geo?.asn || 'Public ASN'} ${geo?.org || ''})`,
-          impact: 'IP geolocation represents observed infrastructure and does not establish the physical location or identity of the sender.',
+          observed: `Location of the observed public IP: ${publicOriginHop.ip} [${geo?.city ? geo.city + ', ' : ''}${geo?.country || 'Unknown'}] (${geo?.asn || 'Public ASN'} ${geo?.org || ''})`,
+          impact: 'GeoIP shows the observable infrastructure associated with the email route. It does not establish the attacker\'s physical identity or exact location.',
         });
       }
     } else if (enrichedHops.some((h) => h.ip && h.isPrivate)) {
@@ -105,7 +117,7 @@ export class InfrastructureAnalyzer {
         title: 'Internal / Private Infrastructure Only',
         source: 'Infrastructure',
         observed: `All observed hops belong to private/internal RFC 1918 or loopback address blocks.`,
-        impact: 'Geolocation unavailable — private/internal IP.',
+        impact: 'Geolocation unavailable — private/internal IP. Location unavailable — private/internal IP.',
       });
     } else {
       findings.push({
@@ -114,7 +126,7 @@ export class InfrastructureAnalyzer {
         title: 'No Routable IPs Found',
         source: 'Infrastructure',
         observed: 'No routable IP addresses detected in transport headers.',
-        impact: 'No routable IPs found.',
+        impact: 'No routable IPs found. Location unavailable — no transport IPs.',
       });
     }
 

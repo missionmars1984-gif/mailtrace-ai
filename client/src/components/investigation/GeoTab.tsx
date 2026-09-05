@@ -42,7 +42,9 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
   const activeHop: RouteHop | undefined = (hops && hops[selectedHopIndex]) || observedOriginRelay || (hops && hops[0]);
   const isPrivate = Boolean(activeHop?.isPrivate);
   const geo = activeHop?.geo;
-  const lookupStatus = geo?.lookupStatus || (isPrivate ? 'private_ip' : 'unavailable');
+  const isPublic = Boolean(activeHop?.isPublic ?? (!isPrivate && activeHop?.ip));
+  const geoAvailable = Boolean(activeHop?.geoAvailable ?? geo?.geoAvailable ?? (activeHop?.lookupStatus === 'resolved' || geo?.lookupStatus === 'resolved'));
+  const lookupStatus = activeHop?.lookupStatus || geo?.lookupStatus || (isPrivate ? 'private_ip' : 'unavailable');
 
   // Convert lat/long to SVG percentages (Mercator projection approximation)
   const getCoordinates = (lat?: number, lon?: number) => {
@@ -54,17 +56,26 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
     return { x, y, valid: true };
   };
 
-  const coords = getCoordinates(geo?.lat, geo?.lon);
-  const hasGenuinePin = coords.valid && !isPrivate && (lookupStatus === 'resolved' || Boolean(geo?.lat && geo?.lon));
+  const hopLat = activeHop?.latitude ?? activeHop?.lat ?? geo?.latitude ?? geo?.lat;
+  const hopLon = activeHop?.longitude ?? activeHop?.lon ?? geo?.longitude ?? geo?.lon;
+  const coords = getCoordinates(hopLat, hopLon);
+  const hasGenuinePin = coords.valid && !isPrivate && geoAvailable;
 
   // Extract all hops with valid coordinates for route mapping
   const plottableHops = (hops || [])
-    .map((h, idx) => ({
-      hop: h,
-      idx,
-      coords: getCoordinates(h.geo?.lat, h.geo?.lon),
-    }))
-    .filter((item) => item.coords.valid && !item.hop.isPrivate);
+    .map((h, idx) => {
+      const lat = h.latitude ?? h.lat ?? h.geo?.latitude ?? h.geo?.lat;
+      const lon = h.longitude ?? h.lon ?? h.geo?.longitude ?? h.geo?.lon;
+      const isHopPrivate = Boolean(h.isPrivate);
+      const isHopGeoAvailable = Boolean(h.geoAvailable ?? h.geo?.geoAvailable ?? (h.lookupStatus === 'resolved' || h.geo?.lookupStatus === 'resolved'));
+      return {
+        hop: h,
+        idx,
+        coords: getCoordinates(lat, lon),
+        isPlottable: !isHopPrivate && isHopGeoAvailable,
+      };
+    })
+    .filter((item) => item.coords.valid && item.isPlottable);
 
   return (
     <div className="space-y-6">
@@ -72,8 +83,8 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
       <div className="p-4 bg-blue-50/80 border border-blue-200 rounded-xl flex items-start gap-3 text-xs text-blue-950 shadow-sm">
         <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
         <div className="leading-relaxed">
-          <strong className="font-bold block text-sm mb-0.5">Observed Email Infrastructure & Approximate Network Location:</strong>
-          IP geolocation represents <strong>observed infrastructure</strong> and does <strong>not</strong> establish the physical location or identity of the sender. Transmitting relays are derived strictly from RFC 5322 <code className="bg-blue-100/80 px-1 py-0.5 rounded font-mono">Received:</code> technical headers.
+          <strong className="font-bold block text-sm mb-0.5">Observed mail infrastructure location:</strong>
+          GeoIP shows the observable infrastructure associated with the email route. It does not establish the attacker's physical identity or exact location. Transmitting relays are derived strictly from RFC 5322 <code className="bg-blue-100/80 px-1 py-0.5 rounded font-mono">Received:</code> technical headers.
         </div>
       </div>
 
@@ -94,7 +105,10 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
             {hops.map((hop, idx) => {
               const isSelected = idx === selectedHopIndex;
               const isPublicRelay = hop.isPublicOriginRelay;
-              const hasGeo = Boolean(hop.geo?.country && !hop.isPrivate && hop.geo?.lat);
+              const isHopPrivate = Boolean(hop.isPrivate);
+              const isHopGeoAvailable = Boolean(hop.geoAvailable ?? hop.geo?.geoAvailable ?? (hop.lookupStatus === 'resolved' || hop.geo?.lookupStatus === 'resolved'));
+              const countryDisplay = hop.geo?.countryCode || hop.countryCode || hop.geo?.country || hop.country;
+              const hasGeo = !isHopPrivate && isHopGeoAvailable && countryDisplay && Boolean(hop.latitude || hop.lat || hop.geo?.latitude || hop.geo?.lat);
 
               return (
                 <button
@@ -117,14 +131,14 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
                       Origin Relay
                     </span>
                   )}
-                  {hop.isPrivate ? (
+                  {isHopPrivate ? (
                     <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold uppercase ${isSelected ? 'bg-blue-800 text-blue-200' : 'bg-slate-200 text-slate-600'}`}>
                       Private
                     </span>
                   ) : hasGeo ? (
                     <span className={`text-[10px] flex items-center gap-1 ${isSelected ? 'text-blue-100' : 'text-emerald-700 font-semibold'}`}>
                       <MapPin className="w-2.5 h-2.5" />
-                      {hop.geo?.countryCode || hop.geo?.country}
+                      {countryDisplay}
                     </span>
                   ) : null}
                 </button>
@@ -221,28 +235,14 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
           {isPrivate && (
             <div className="z-10 text-center px-4 py-3 bg-slate-900/90 border border-slate-700 rounded-lg text-slate-300 text-xs max-w-sm">
               <span className="font-bold text-amber-400 block mb-1">Internal / Private Infrastructure</span>
-              Geolocation unavailable — private/internal IP ({activeHop?.ip || 'RFC 1918'}).
+              Location unavailable — private/internal IP
             </div>
           )}
 
-          {!isPrivate && lookupStatus === 'rate_limited' && (
-            <div className="z-10 text-center px-4 py-3 bg-slate-900/90 border border-amber-700/80 rounded-lg text-amber-200 text-xs max-w-sm">
-              <span className="font-bold text-amber-400 block mb-1">Rate Limit Exceeded</span>
-              GeoIP service rate limited.
-            </div>
-          )}
-
-          {!isPrivate && lookupStatus === 'timeout' && (
-            <div className="z-10 text-center px-4 py-3 bg-slate-900/90 border border-slate-700 rounded-lg text-slate-300 text-xs max-w-sm">
-              <span className="font-bold text-amber-400 block mb-1">Lookup Timed Out</span>
-              Location lookup timed out.
-            </div>
-          )}
-
-          {!isPrivate && lookupStatus === 'lookup_failed' && (
+          {!isPrivate && activeHop?.ip && !geoAvailable && (
             <div className="z-10 text-center px-4 py-3 bg-slate-900/90 border border-slate-700 rounded-lg text-slate-300 text-xs max-w-sm">
               <span className="font-bold text-slate-400 block mb-1">Lookup Unavailable</span>
-              Location lookup unavailable.
+              Location unavailable — GeoIP lookup unavailable
             </div>
           )}
 
@@ -287,11 +287,24 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
             <span className="text-slate-400 uppercase font-bold text-[10px] block mb-1">
               Country & Region
             </span>
-            <span className="font-bold text-slate-900 text-sm block truncate">
-              {isPrivate ? 'Internal Network' : (geo?.country || activeHop?.country || 'Unavailable')}
+            <span
+              className="font-bold text-slate-900 text-sm block truncate"
+              title={
+                isPrivate
+                  ? 'Location unavailable — private/internal IP'
+                  : (!geoAvailable
+                      ? 'Location unavailable — GeoIP lookup unavailable'
+                      : (geo?.country || activeHop?.country || 'Unavailable'))
+              }
+            >
+              {isPrivate
+                ? 'Location unavailable — private/internal IP'
+                : (!geoAvailable
+                    ? 'Location unavailable — GeoIP lookup unavailable'
+                    : (geo?.country || activeHop?.country || 'Unavailable'))}
             </span>
             <span className="text-[10px] text-slate-400 block mt-0.5">
-              Region: {isPrivate ? 'Internal Subnet' : (geo?.region || activeHop?.region || 'N/A')}
+              Region: {isPrivate ? 'Internal Subnet' : (geoAvailable ? (geo?.region || activeHop?.region || 'N/A') : 'N/A')}
             </span>
           </div>
 
@@ -300,10 +313,12 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
               City / Metropolitan
             </span>
             <span className="font-bold text-slate-900 text-sm block truncate">
-              {isPrivate ? 'Private Intranet' : (geo?.city || activeHop?.city || 'Unresolved')}
+              {isPrivate
+                ? 'N/A'
+                : (geoAvailable ? (geo?.city || activeHop?.city || 'Unresolved') : 'N/A')}
             </span>
             <span className="text-[10px] text-slate-400 block mt-0.5">
-              Coordinates: {hasGenuinePin && (geo?.lat !== undefined || activeHop?.lat !== undefined) ? `${(geo?.lat ?? activeHop?.lat)?.toFixed(4)}°, ${(geo?.lon ?? activeHop?.lon)?.toFixed(4)}°` : 'N/A'}
+              Coordinates: {hasGenuinePin ? `${hopLat?.toFixed(4)}°, ${hopLon?.toFixed(4)}°` : 'N/A'}
             </span>
           </div>
 
@@ -312,10 +327,12 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
               ASN & Internet Service Provider
             </span>
             <span className="font-mono font-bold text-slate-900 text-sm block">
-              {geo?.asn || activeHop?.asn || (isPrivate ? 'RFC1918' : 'Unassigned')}
+              {isPrivate ? 'RFC1918' : (geoAvailable ? (geo?.asn || activeHop?.asn || 'Unassigned') : 'N/A')}
             </span>
-            <span className="text-[10px] text-slate-400 block mt-0.5 truncate" title={geo?.org || geo?.isp || activeHop?.org}>
-              {geo?.org || geo?.isp || activeHop?.org || (isPrivate ? 'Internal Enterprise Cluster' : 'Unavailable')}
+            <span className="text-[10px] text-slate-400 block mt-0.5 truncate" title={geo?.org || geo?.organization || geo?.isp || activeHop?.org || activeHop?.organization}>
+              {isPrivate
+                ? 'Internal Enterprise Cluster'
+                : (geoAvailable ? (geo?.org || geo?.organization || geo?.isp || activeHop?.org || activeHop?.organization || 'Unavailable') : 'N/A')}
             </span>
           </div>
         </div>
@@ -325,7 +342,13 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
             Telemetry Source: <strong className="font-mono text-slate-700">Received:</strong> header hop sequence
           </span>
           <span className="font-medium text-slate-600">
-            Lookup Status: <strong className="font-semibold text-slate-800">{geo?.statusMessage || (lookupStatus === 'resolved' ? 'Resolved' : lookupStatus === 'private_ip' ? 'Private / Internal IP' : 'Unavailable')}</strong>
+            Lookup Status: <strong className="font-semibold text-slate-800">
+              {isPrivate
+                ? 'Location unavailable — private/internal IP'
+                : (!geoAvailable
+                    ? 'Location unavailable — GeoIP lookup unavailable'
+                    : (geo?.statusMessage || activeHop?.statusMessage || 'Resolved via live GeoIP provider'))}
+            </strong>
           </span>
         </div>
       </div>
