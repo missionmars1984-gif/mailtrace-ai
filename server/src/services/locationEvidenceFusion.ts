@@ -162,7 +162,7 @@ export class LocationEvidenceFusion {
           confidenceLevel: 'HIGH',
           evidence: [
             ...((latestGenuine.geo as any).evidence || []),
-            `Verified human recipient interaction (${(latestGenuine.eventType || latestGenuine.type || '').toUpperCase()}) recorded at ${latestGenuine.timestamp}`,
+            `Verified human recipient interaction (${(latestGenuine.eventType || (latestGenuine as any).type || '').toUpperCase()}) recorded at ${latestGenuine.timestamp}`,
           ],
         };
       }
