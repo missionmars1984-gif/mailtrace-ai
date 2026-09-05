@@ -15,6 +15,8 @@ import { RiskEngine } from '../scoring/riskEngine.js';
 import { ForensicHashService } from '../crypto/forensicHash.js';
 import { DatabaseService } from '../db/database.js';
 import { GeoLocationProvider, geoProvider } from '../services/geoLocationProvider.js';
+import { LocationEvidenceFusion } from '../services/locationEvidenceFusion.js';
+import { TrackingService } from '../services/trackingService.js';
 import type {
   CaseRecord,
   SecurityFinding,
@@ -135,6 +137,15 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
     observedLocation = 'Geolocation unavailable — private/internal IP';
   }
 
+  // 11c. Multi-Signal Geolocation & Attribution Engine Synthesis
+  const geoAttribution = LocationEvidenceFusion.synthesize({
+    originRelay: observedOriginRelay,
+    hops,
+    trackingEvents: [],
+    senderAddress: parsed.from.address,
+    dateHeader: parsed.date,
+  });
+
   // Consolidate findings across all independent models
   const findings: SecurityFinding[] = [
     ...identityModelOutput.findings,
@@ -145,6 +156,36 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
     ...socialOutput.findings,
     ...infraFindings,
   ];
+
+  // Inject routing / impossible-travel / timezone / historical anomalies from Geo Engine into security findings
+  for (const anomaly of geoAttribution.anomalies) {
+    let severity: 'CRITICAL' | 'HIGH' | 'MEDIUM' = 'MEDIUM';
+    let type: 'INFRASTRUCTURE' | 'IDENTITY' = 'INFRASTRUCTURE';
+    let title = 'Geographic Routing Anomaly';
+
+    if (anomaly.toLowerCase().includes('impossible travel')) {
+      severity = 'CRITICAL';
+      type = 'INFRASTRUCTURE';
+      title = 'Physical Impossible Travel Anomaly';
+    } else if (anomaly.toLowerCase().includes('timezone')) {
+      severity = 'HIGH';
+      type = 'INFRASTRUCTURE';
+      title = 'Header Timezone vs Longitude Discrepancy';
+    } else if (anomaly.toLowerCase().includes('historical')) {
+      severity = 'HIGH';
+      type = 'IDENTITY';
+      title = 'Historical Sender Routing Anomaly';
+    }
+
+    findings.push({
+      type,
+      severity,
+      title,
+      source: 'GeoAttribution',
+      observed: anomaly,
+      impact: 'Physical location claims in message text or network headers deviate from observable routing.',
+    });
+  }
 
   if (claimedLocation && observedLocation && !observedLocation.includes('unavailable') && !observedLocation.includes('No routable')) {
     findings.push({
@@ -405,6 +446,8 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
     geoDiagnostic,
     claimedLocation,
     observedLocation,
+    geoAttribution,
+    trackingEvents: [],
   };
 
   // 19. Persist to SQLite
@@ -544,6 +587,17 @@ apiRouter.get('/cases/:id', (req: Request, res: Response) => {
     if (!record) {
       return res.status(404).json({ error: `Case "${caseId}" not found.` });
     }
+    const trackingEvents = DatabaseService.getTrackingEventsForCase(caseId);
+    record.trackingEvents = trackingEvents;
+    if (!record.geoAttribution || trackingEvents.length > 0) {
+      record.geoAttribution = LocationEvidenceFusion.synthesize({
+        originRelay: record.observedOriginRelay,
+        hops: record.hops,
+        trackingEvents,
+        senderAddress: record.metadata.from.address,
+        dateHeader: record.metadata.date,
+      });
+    }
     return res.json(record);
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
@@ -594,6 +648,156 @@ apiRouter.get('/cases/:id/indicators', (req: Request, res: Response) => {
     const caseId = String(req.params.id);
     const iocs = DatabaseService.getCaseIndicators(caseId);
     return res.json(iocs);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ============================================================================
+// Multi-Signal Email Interaction Tracking Endpoints
+// ============================================================================
+
+// GET /api/track/open/:caseId - Open tracking pixel (1x1 transparent GIF)
+apiRouter.get('/track/open/:caseId', async (req: Request, res: Response) => {
+  try {
+    const caseId = String(req.params.caseId);
+    const event = await TrackingService.recordEvent({
+      caseId,
+      eventType: 'open',
+      req,
+    });
+
+    // Update case attribution if case exists
+    const record = DatabaseService.getCaseById(caseId);
+    if (record) {
+      const events = DatabaseService.getTrackingEventsForCase(caseId);
+      record.trackingEvents = events;
+      record.geoAttribution = LocationEvidenceFusion.synthesize({
+        originRelay: record.observedOriginRelay,
+        hops: record.hops,
+        trackingEvents: events,
+        senderAddress: record.metadata.from.address,
+        dateHeader: record.metadata.date,
+      });
+      DatabaseService.saveCase(record);
+      broadcastLiveEvent('tracking-event', { caseId, event, attribution: record.geoAttribution });
+    }
+
+    res.setHeader('Content-Type', 'image/gif');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+    return res.send(TrackingService.TRANSPARENT_GIF);
+  } catch {
+    res.setHeader('Content-Type', 'image/gif');
+    return res.send(TrackingService.TRANSPARENT_GIF);
+  }
+});
+
+// GET /api/track/click/:caseId - Link click tracking & redirection
+apiRouter.get('/track/click/:caseId', async (req: Request, res: Response) => {
+  try {
+    const caseId = String(req.params.caseId);
+    const targetUrl = (req.query.url as string) || '/';
+    const event = await TrackingService.recordEvent({
+      caseId,
+      eventType: 'click',
+      req,
+      targetUrl,
+    });
+
+    const record = DatabaseService.getCaseById(caseId);
+    if (record) {
+      const events = DatabaseService.getTrackingEventsForCase(caseId);
+      record.trackingEvents = events;
+      record.geoAttribution = LocationEvidenceFusion.synthesize({
+        originRelay: record.observedOriginRelay,
+        hops: record.hops,
+        trackingEvents: events,
+        senderAddress: record.metadata.from.address,
+        dateHeader: record.metadata.date,
+      });
+      DatabaseService.saveCase(record);
+      broadcastLiveEvent('tracking-event', { caseId, event, attribution: record.geoAttribution });
+    }
+
+    return res.redirect(targetUrl);
+  } catch {
+    const targetUrl = (req.query.url as string) || '/';
+    return res.redirect(targetUrl);
+  }
+});
+
+// GET /api/cases/:id/tracking-events - Get tracking telemetry events for a case
+apiRouter.get('/cases/:id/tracking-events', (req: Request, res: Response) => {
+  try {
+    const caseId = String(req.params.id);
+    const events = DatabaseService.getTrackingEventsForCase(caseId);
+    return res.json(events);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /api/cases/:id/attribution - Get fresh Multi-Signal Geo Attribution for a case
+apiRouter.get('/cases/:id/attribution', (req: Request, res: Response) => {
+  try {
+    const caseId = String(req.params.id);
+    const record = DatabaseService.getCaseById(caseId);
+    if (!record) {
+      return res.status(404).json({ error: `Case "${caseId}" not found.` });
+    }
+    const events = DatabaseService.getTrackingEventsForCase(caseId);
+    const attribution = LocationEvidenceFusion.synthesize({
+      originRelay: record.observedOriginRelay,
+      hops: record.hops,
+      trackingEvents: events,
+      senderAddress: record.metadata.from.address,
+      dateHeader: record.metadata.date,
+    });
+    return res.json(attribution);
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/cases/:id/simulate-interaction - Simulate open/click event for QA verification
+apiRouter.post('/cases/:id/simulate-interaction', async (req: Request, res: Response) => {
+  try {
+    const caseId = String(req.params.id);
+    const { eventType = 'open', ip = '127.0.0.1', userAgent, targetUrl } = req.body;
+    const fakeReq = {
+      headers: {
+        'x-forwarded-for': ip,
+        'user-agent': userAgent || 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+      socket: { remoteAddress: ip },
+    } as any;
+
+    const event = await TrackingService.recordEvent({
+      caseId,
+      eventType,
+      req: fakeReq,
+      targetUrl,
+    });
+
+    const record = DatabaseService.getCaseById(caseId);
+    let attribution = null;
+    if (record) {
+      const events = DatabaseService.getTrackingEventsForCase(caseId);
+      record.trackingEvents = events;
+      attribution = LocationEvidenceFusion.synthesize({
+        originRelay: record.observedOriginRelay,
+        hops: record.hops,
+        trackingEvents: events,
+        senderAddress: record.metadata.from.address,
+        dateHeader: record.metadata.date,
+      });
+      record.geoAttribution = attribution;
+      DatabaseService.saveCase(record);
+    }
+
+    return res.json({ success: true, event, attribution });
   } catch (err: any) {
     return res.status(500).json({ error: err.message });
   }

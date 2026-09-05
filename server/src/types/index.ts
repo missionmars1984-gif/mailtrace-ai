@@ -96,6 +96,72 @@ export interface NormalizedGeoLocation {
   error: string | null;
 }
 
+export type ConfidenceLevel = 'VERY_LOW' | 'LOW' | 'MODERATE' | 'HIGH' | 'VERY_HIGH';
+
+export type NetworkClassificationType =
+  | 'RESIDENTIAL'
+  | 'MOBILE'
+  | 'CORPORATE'
+  | 'EDUCATIONAL'
+  | 'HOSTING'
+  | 'CLOUD'
+  | 'CDN'
+  | 'VPN'
+  | 'PROXY'
+  | 'TOR'
+  | 'PRIVACY_RELAY'
+  | 'SECURITY_SCANNER'
+  | 'UNKNOWN';
+
+export interface LocationHypothesis {
+  ip?: string;
+  country: string | null;
+  countryCode?: string | null;
+  region: string | null;
+  city: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  accuracyRadiusKm: number;
+  confidence: number;
+  confidenceLevel: ConfidenceLevel;
+  networkType: NetworkClassificationType;
+  asn?: string | null;
+  isp?: string | null;
+  organization?: string | null;
+  evidence: string[];
+  limitations: string[];
+  sourceSignals: string[];
+  hypothesisType: 'INFRASTRUCTURE' | 'INTERACTION' | 'USER_ESTIMATE' | 'COMPETING';
+}
+
+export interface TrackingEvent {
+  id: string;
+  caseId: string;
+  eventType: 'open' | 'click';
+  ip: string;
+  userAgent?: string;
+  timestamp: string;
+  isPrefetchOrProxy?: boolean;
+  proxyType?: 'APPLE_MPP' | 'GOOGLE_PROXY' | 'SECURITY_SCANNER' | 'GENUINE_CLIENT' | 'UNKNOWN';
+  targetUrl?: string;
+  geo?: LocationHypothesis;
+}
+
+export interface MultiSignalGeoAttribution {
+  sendingInfrastructure: LocationHypothesis | null;
+  interactionLocation: LocationHypothesis | null;
+  estimatedUserLocation: LocationHypothesis | null;
+  competingHypotheses: LocationHypothesis[];
+  anomalies: string[];
+  limitations: string[];
+  overallConfidence: number;
+  overallConfidenceLevel: ConfidenceLevel;
+  trackingEventsCount: number;
+  lastInteractionAt?: string;
+  impossibleTravelDetected?: boolean;
+  scoringWeightsSnapshot?: Record<string, number>;
+}
+
 export interface GeoLocationData {
   ip?: string;
   country: string | null;
@@ -123,6 +189,7 @@ export interface GeoLocationData {
   reason?: string;
   ipType?: IpClassificationType;
   classification?: IpClassificationType;
+  networkType?: NetworkClassificationType;
   lookupStatus?: GeoLookupStatus;
   statusMessage?: string;
   source?: string;
@@ -166,6 +233,7 @@ export interface RouteHop {
   error?: string | null;
   lookupStatus?: GeoLookupStatus;
   statusMessage?: string;
+  networkType?: NetworkClassificationType;
   geo?: GeoLocationData;
 }
 
@@ -529,6 +597,8 @@ export interface CaseRecord {
   geoDiagnostic?: GeoPipelineDiagnostic;
   claimedLocation?: string;
   observedLocation?: string;
+  geoAttribution?: MultiSignalGeoAttribution;
+  trackingEvents?: TrackingEvent[];
 }
 
 export interface DashboardStats {

@@ -14,6 +14,7 @@ import type {
   ReportRecord,
   CampaignCluster,
   AssistantMessage,
+  TrackingEvent,
 } from '../types/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -160,13 +161,31 @@ db.exec(`
     timestamp TEXT NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS tracking_events (
+    id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    ip TEXT NOT NULL,
+    user_agent TEXT,
+    timestamp TEXT NOT NULL,
+    is_proxy INTEGER DEFAULT 0,
+    proxy_type TEXT,
+    target_url TEXT,
+    data_json TEXT
+  );
+
   CREATE INDEX IF NOT EXISTS idx_cases_created ON cases(created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_indicators_case ON indicators(case_id);
   CREATE INDEX IF NOT EXISTS idx_indicators_type ON indicators(type);
   CREATE INDEX IF NOT EXISTS idx_indicators_val ON indicators(value);
   CREATE INDEX IF NOT EXISTS idx_reports_created ON reports(generated_at DESC);
+  CREATE INDEX IF NOT EXISTS idx_tracking_events_case ON tracking_events(case_id);
+  CREATE INDEX IF NOT EXISTS idx_tracking_events_time ON tracking_events(timestamp DESC);
 `);
 
+try {
+  db.exec(`PRAGMA foreign_keys = OFF;`);
+} catch {}
 try {
   db.exec(`ALTER TABLE geo_locations ADD COLUMN lookup_status TEXT DEFAULT 'resolved'`);
 } catch {}
@@ -395,6 +414,64 @@ export class DatabaseService {
       );
     } catch (err) {
       console.warn(`[DatabaseService] cacheGeoLocation error for ${ip}:`, err);
+    }
+  }
+
+  static saveTrackingEvent(event: TrackingEvent): void {
+    try {
+      const stmt = db.prepare(`
+        INSERT OR REPLACE INTO tracking_events (
+          id, case_id, event_type, ip, user_agent, timestamp, is_proxy, proxy_type, target_url, data_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      stmt.run(
+        event.id,
+        event.caseId,
+        event.eventType,
+        event.ip,
+        event.userAgent || null,
+        event.timestamp,
+        event.isPrefetchOrProxy ? 1 : 0,
+        event.proxyType || null,
+        event.targetUrl || null,
+        JSON.stringify(event)
+      );
+    } catch (err) {
+      console.warn(`[DatabaseService] saveTrackingEvent error:`, err);
+    }
+  }
+
+  static getTrackingEventsForCase(caseId: string): TrackingEvent[] {
+    try {
+      const stmt = db.prepare(`SELECT data_json FROM tracking_events WHERE case_id = ? ORDER BY timestamp ASC`);
+      const rows = stmt.all(caseId) as Array<{ data_json: string }>;
+      return rows.map((r) => JSON.parse(r.data_json));
+    } catch {
+      return [];
+    }
+  }
+
+  static getCasesBySenderDomain(domain: string): CaseRecord[] {
+    if (!domain) return [];
+    try {
+      const pattern = `%@${domain}%`;
+      const stmt = db.prepare(`SELECT data_json FROM cases WHERE sender_from LIKE ? ORDER BY created_at DESC LIMIT 20`);
+      const rows = stmt.all(pattern) as Array<{ data_json: string }>;
+      return rows.map((r) => JSON.parse(r.data_json));
+    } catch {
+      return [];
+    }
+  }
+
+  static getCasesBySenderAddress(address: string): CaseRecord[] {
+    if (!address) return [];
+    try {
+      const pattern = `%${address}%`;
+      const stmt = db.prepare(`SELECT data_json FROM cases WHERE sender_from LIKE ? ORDER BY created_at DESC LIMIT 20`);
+      const rows = stmt.all(pattern) as Array<{ data_json: string }>;
+      return rows.map((r) => JSON.parse(r.data_json));
+    } catch {
+      return [];
     }
   }
 

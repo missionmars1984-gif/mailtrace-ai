@@ -1,5 +1,6 @@
 import type { RouteHop, SecurityFinding, GeoLocationData, GeoPipelineDiagnostic } from '../types/index.js';
 import { geoProvider, GeoLocationProvider } from '../services/geoLocationProvider.js';
+import { NetworkClassifier } from '../services/networkClassifier.js';
 
 export class InfrastructureAnalyzer {
   static isPrivateIp(ip: string): boolean {
@@ -36,6 +37,14 @@ export class InfrastructureAnalyzer {
       const isPublic = !isPrivate && Boolean(ip);
       const geoAvailable = Boolean(geo?.geoAvailable ?? (geo?.lat !== undefined && geo?.lon !== undefined && geo?.lookupStatus === 'resolved'));
 
+      const network = NetworkClassifier.classify({
+        ip,
+        asn: geo?.asn,
+        org: geo?.org,
+        isp: geo?.isp,
+        hostname: hop.hostname || (hop.from ? hop.from.split(/\s+/)[0].trim() : undefined),
+      });
+
       const enriched: RouteHop = {
         ...hop,
         hostname: hop.hostname || (hop.from ? hop.from.split(/\s+/)[0].trim() : undefined),
@@ -62,7 +71,8 @@ export class InfrastructureAnalyzer {
         error: geo?.error,
         statusMessage: geo?.statusMessage,
         lookupStatus: geo?.lookupStatus || (isPrivate ? 'private_ip' : 'unavailable'),
-        geo,
+        networkType: network.networkType,
+        geo: geo ? { ...geo, networkType: network.networkType } : undefined,
       };
 
       // Diagnostic logging of complete chain for this hop

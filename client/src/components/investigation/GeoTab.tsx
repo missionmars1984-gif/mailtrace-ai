@@ -10,6 +10,12 @@ import {
   Layers,
   Network,
   CheckCircle2,
+  AlertTriangle,
+  ShieldAlert,
+  HelpCircle,
+  Clock,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import type { CaseRecord, RouteHop } from '../../types.js';
 
@@ -18,7 +24,8 @@ interface GeoTabProps {
 }
 
 export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
-  const { hops, observedOriginRelay } = caseData;
+  const { hops, observedOriginRelay, geoAttribution } = caseData;
+  const [showCompeting, setShowCompeting] = useState(false);
 
   // Identify default origin hop index
   const getDefaultIndex = (): number => {
@@ -45,6 +52,15 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
   const isPublic = Boolean(activeHop?.isPublic ?? (!isPrivate && activeHop?.ip));
   const geoAvailable = Boolean(activeHop?.geoAvailable ?? geo?.geoAvailable ?? (activeHop?.lookupStatus === 'resolved' || geo?.lookupStatus === 'resolved'));
   const lookupStatus = activeHop?.lookupStatus || geo?.lookupStatus || (isPrivate ? 'private_ip' : 'unavailable');
+
+  // Multi-signal attribution extracted
+  const sendingInfra = geoAttribution?.sendingInfrastructure;
+  const interactionLoc = geoAttribution?.interactionLocation;
+  const userLoc = geoAttribution?.estimatedUserLocation;
+  const competingHypotheses = geoAttribution?.competingHypotheses || [];
+  const anomalies = geoAttribution?.anomalies || [];
+  const overallConfidence = geoAttribution?.overallConfidence ?? (userLoc?.confidence ?? 0);
+  const confidenceLevel = geoAttribution?.overallConfidenceLevel ?? (userLoc?.confidenceLevel ?? 'VERY_LOW');
 
   // Convert lat/long to SVG percentages (Mercator projection approximation)
   const getCoordinates = (lat?: number | null, lon?: number | null) => {
@@ -88,16 +104,246 @@ export const GeoTab: React.FC<GeoTabProps> = ({ caseData }) => {
     })
     .filter((item) => item.isPlottable);
 
+  const getConfidenceBadgeColor = (level?: string) => {
+    switch (level) {
+      case 'VERY_HIGH':
+      case 'HIGH':
+        return 'bg-emerald-100 text-emerald-800 border-emerald-300';
+      case 'MODERATE':
+        return 'bg-amber-100 text-amber-800 border-amber-300';
+      case 'LOW':
+      case 'VERY_LOW':
+      default:
+        return 'bg-slate-100 text-slate-700 border-slate-300';
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Mandatory Forensic Disclaimer */}
       <div className="p-4 bg-blue-50/80 border border-blue-200 rounded-xl flex items-start gap-3 text-xs text-blue-950 shadow-sm">
         <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
         <div className="leading-relaxed">
-          <strong className="font-bold block text-sm mb-0.5">Observed mail infrastructure location:</strong>
-          GeoIP shows the observable infrastructure associated with the email route. It does not establish the attacker's physical identity or exact location. Transmitting relays are derived strictly from RFC 5322 <code className="bg-blue-100/80 px-1 py-0.5 rounded font-mono">Received:</code> technical headers.
+          <strong className="font-bold block text-sm mb-0.5">Multi-Signal Forensic Attribution Notice:</strong>
+          Email geolocation reflects observable network routing and autonomous system infrastructure. It does not establish the physical identity or street address of an individual author. Sending infrastructure, recipient interactions, and user estimates are segregated below with explicit confidence calibration and accuracy radii.
         </div>
       </div>
+
+      {/* Multi-Signal Attribution 3-Tier Card Deck */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Card 1: Sending Infrastructure */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wider">
+                <Server className="w-4 h-4 text-blue-600" />
+                Sending Infrastructure
+              </span>
+              <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-blue-50 text-blue-700 border border-blue-200">
+                {sendingInfra?.networkType || 'RELAY'}
+              </span>
+            </div>
+            <div className="text-sm font-bold text-slate-900 truncate">
+              {sendingInfra?.city ? `${sendingInfra.city}, ` : ''}{sendingInfra?.country || 'Unavailable'}
+            </div>
+            <div className="text-[11px] text-slate-500 font-mono mt-0.5 truncate">
+              IP: {sendingInfra?.ip || (hops && hops[0]?.ip) || 'No routable IP'}
+            </div>
+            <div className="text-[11px] text-slate-600 mt-2 space-y-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">ASN / Provider:</span>
+                <span className="font-semibold text-slate-700 truncate max-w-[140px]" title={sendingInfra?.organization || sendingInfra?.isp || 'N/A'}>
+                  {sendingInfra?.asn || 'Unassigned'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">Accuracy Radius:</span>
+                <span className="font-semibold text-slate-700">
+                  {sendingInfra?.accuracyRadiusKm ? `±${sendingInfra.accuracyRadiusKm} km` : 'N/A'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 pt-2.5 border-t border-slate-100 text-[10px] text-slate-400 flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3 text-blue-500 flex-shrink-0" />
+            <span className="truncate">Derived from RFC 5322 Received hops</span>
+          </div>
+        </div>
+
+        {/* Card 2: Email Interaction Location */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wider">
+                <Radio className="w-4 h-4 text-purple-600" />
+                Interaction Location
+              </span>
+              {interactionLoc ? (
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-purple-50 text-purple-700 border border-purple-200">
+                  {interactionLoc.networkType}
+                </span>
+              ) : (
+                <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500">
+                  Awaiting Telemetry
+                </span>
+              )}
+            </div>
+
+            {interactionLoc ? (
+              <>
+                <div className="text-sm font-bold text-slate-900 truncate">
+                  {interactionLoc.city ? `${interactionLoc.city}, ` : ''}{interactionLoc.country || 'Unknown Jurisdiction'}
+                </div>
+                <div className="text-[11px] text-slate-500 font-mono mt-0.5 truncate">
+                  Client IP: {interactionLoc.ip || 'Recorded'}
+                </div>
+                <div className="text-[11px] text-slate-600 mt-2 space-y-1">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">Telemetry Type:</span>
+                    <span className="font-semibold text-slate-700 truncate max-w-[140px]">
+                      {interactionLoc.sourceSignals?.[0] || 'Open/Click Pixel'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="text-slate-400">Accuracy Radius:</span>
+                    <span className="font-semibold text-slate-700">
+                      ±{interactionLoc.accuracyRadiusKm} km
+                    </span>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div className="py-2 text-[11px] text-slate-500 leading-relaxed">
+                No tracking pixel open or link click telemetry recorded yet for this message. Passive sensors active on client mail render.
+              </div>
+            )}
+          </div>
+          <div className="mt-3 pt-2.5 border-t border-slate-100 text-[10px] text-slate-400 flex items-center gap-1">
+            <Clock className="w-3 h-3 text-purple-500 flex-shrink-0" />
+            <span className="truncate">
+              {geoAttribution?.lastInteractionAt
+                ? `Last event: ${new Date(geoAttribution.lastInteractionAt).toLocaleTimeString()}`
+                : 'Passive tracking endpoint: /api/track/open'}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Estimated User Location */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-700 flex items-center gap-1.5 uppercase tracking-wider">
+                <Compass className="w-4 h-4 text-emerald-600" />
+                Estimated User Location
+              </span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${getConfidenceBadgeColor(confidenceLevel)}`}>
+                {userLoc ? `${userLoc.confidence}% (${userLoc.confidenceLevel})` : '0%'}
+              </span>
+            </div>
+            <div className="text-sm font-bold text-slate-900 truncate">
+              {userLoc?.country || 'Inconclusive / Unknown'}
+            </div>
+            <div className="text-[11px] text-slate-500 mt-0.5 truncate">
+              {userLoc?.city ? `Metropolitan: ${userLoc.city}` : (userLoc?.limitations?.[0] || 'Evidence synthesis')}
+            </div>
+            <div className="text-[11px] text-slate-600 mt-2 space-y-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">Accuracy Radius:</span>
+                <span className="font-semibold text-slate-700">
+                  {userLoc?.accuracyRadiusKm ? `~${userLoc.accuracyRadiusKm} km` : 'Inconclusive'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-slate-400">Network Tier:</span>
+                <span className="font-semibold text-slate-700">
+                  {userLoc?.networkType || 'UNKNOWN'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 pt-2.5 border-t border-slate-100 text-[10px] text-slate-400 flex items-center gap-1">
+            <Compass className="w-3 h-3 text-emerald-500 flex-shrink-0" />
+            <span className="truncate">Synthesized multi-signal evidence fusion</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Forensic Anomalies Banner if detected */}
+      {anomalies.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 shadow-sm space-y-2">
+          <div className="flex items-center gap-2 text-xs font-bold text-amber-900 uppercase tracking-wider">
+            <AlertTriangle className="w-4 h-4 text-amber-600" />
+            Detected Routing & Travel Anomalies ({anomalies.length})
+          </div>
+          <ul className="space-y-1.5 text-xs text-amber-900">
+            {anomalies.map((a, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span className="font-mono text-[10px] bg-amber-200 text-amber-900 px-1 rounded mt-0.5">!</span>
+                <span>{a}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* Competing Hypotheses & Evidence Details Accordion */}
+      {(userLoc?.evidence && userLoc.evidence.length > 0) || competingHypotheses.length > 0 ? (
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 text-xs space-y-3">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-slate-800 flex items-center gap-1.5">
+              <ShieldAlert className="w-4 h-4 text-slate-600" />
+              Evidence Rationale & Limitations
+            </span>
+            {competingHypotheses.length > 0 && (
+              <button
+                onClick={() => setShowCompeting(!showCompeting)}
+                className="text-blue-600 hover:text-blue-800 font-semibold flex items-center gap-1 text-[11px]"
+              >
+                {competingHypotheses.length} Competing Hypotheses
+                {showCompeting ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+            <div>
+              <span className="font-bold text-slate-700 block mb-1">Supporting Evidence:</span>
+              <ul className="space-y-1 text-slate-600 list-disc list-inside">
+                {(userLoc?.evidence || []).map((ev, i) => (
+                  <li key={i} className="leading-relaxed">{ev}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <span className="font-bold text-slate-700 block mb-1">Limitations & Forensic Caveats:</span>
+              <ul className="space-y-1 text-slate-500 list-disc list-inside">
+                {(userLoc?.limitations || []).map((lim, i) => (
+                  <li key={i} className="leading-relaxed">{lim}</li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {showCompeting && competingHypotheses.length > 0 && (
+            <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
+              <span className="font-bold text-slate-700 block">Competing Hypotheses Evaluated:</span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {competingHypotheses.map((h, i) => (
+                  <div key={i} className="bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-slate-800">
+                      <span>Hypothesis #{i + 1}: {h.country}</span>
+                      <span className="font-mono text-slate-500">{h.confidence}%</span>
+                    </div>
+                    <div className="text-[10px] text-slate-600 mt-1 leading-relaxed">
+                      {h.evidence?.[0] || 'Alternative routing interpretation'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      ) : null}
 
       {/* Interactive Hop Selector Bar */}
       {hops && hops.length > 0 && (
