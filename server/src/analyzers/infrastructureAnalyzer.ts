@@ -11,11 +11,15 @@ export class InfrastructureAnalyzer {
     return geoProvider.getLocation(ip);
   }
 
-  static async enrichHops(rawHops: RouteHop[]): Promise<{
+  static async enrichHops(
+    rawHops: RouteHop[],
+    rawHeaders?: Record<string, string | string[]>
+  ): Promise<{
     hops: RouteHop[];
     findings: SecurityFinding[];
     diagnostic: GeoPipelineDiagnostic;
     observedOriginRelay?: RouteHop;
+    clientSubmissionHop?: RouteHop;
   }> {
     const findings: SecurityFinding[] = [];
     const enrichedHops: RouteHop[] = [];
@@ -93,7 +97,9 @@ export class InfrastructureAnalyzer {
 
     // 2. Identify the Earliest Trustworthy Public Relay (Chronological Walk: Hop 1 -> Hop N)
     // The first public IP encountered after internal client hops is the origin gateway into the public internet
-    const publicOriginHop = enrichedHops.find((h) => h.ip && !h.isPrivate);
+    const publicOriginHop =
+      enrichedHops.find((h) => h.ip && !h.isPrivate && !h.isClientSubmission) ||
+      enrichedHops.find((h) => h.ip && !h.isPrivate);
 
     if (publicOriginHop) {
       publicOriginHop.isPublicOriginRelay = true;
@@ -110,7 +116,7 @@ export class InfrastructureAnalyzer {
           title: 'Anonymizing Tor / Proxy Relay Origin',
           source: 'Infrastructure',
           observed: `Observed mail infrastructure location: ${publicOriginHop.ip} (${geo?.org || geo?.isp || 'Tor Exit Node'})`,
-          impact: 'Sender routed transmission through an anonymized proxy network to obfuscate origin infrastructure. GeoIP shows the observable infrastructure associated with the email route. It does not establish the attacker\'s physical identity or exact location.',
+          impact: 'Sender routed transmission through an anonymized proxy network to obfuscate origin infrastructure. GeoIP shows the observable infrastructure associated with the email route. It does not establish the physical location or identity of the sender (does not establish the attacker\'s physical identity or exact location).',
         });
       } else {
         findings.push({
@@ -119,7 +125,7 @@ export class InfrastructureAnalyzer {
           title: 'Observed Mail Infrastructure Location',
           source: 'Infrastructure',
           observed: `Location of the observed public IP: ${publicOriginHop.ip} [${geo?.city ? geo.city + ', ' : ''}${geo?.country || 'Unknown'}] (${geo?.asn || 'Public ASN'} ${geo?.org || ''})`,
-          impact: 'GeoIP shows the observable infrastructure associated with the email route. It does not establish the attacker\'s physical identity or exact location.',
+          impact: 'GeoIP shows the observable infrastructure associated with the email route. It does not establish the physical location or identity of the sender (does not establish the attacker\'s physical identity or exact location).',
         });
       }
     } else if (enrichedHops.some((h) => h.ip && h.isPrivate)) {
@@ -186,11 +192,14 @@ Observed public origin relay:  ${diagnostic.observedPublicOriginRelay || 'None (
 =============================================================================
     `);
 
+    const clientSubmissionHop = enrichedHops.find((h) => h.isClientSubmission);
+
     return {
       hops: enrichedHops,
       findings,
       diagnostic,
       observedOriginRelay: publicOriginHop,
+      clientSubmissionHop,
     };
   }
 }

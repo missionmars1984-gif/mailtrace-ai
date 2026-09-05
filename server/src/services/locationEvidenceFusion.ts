@@ -52,12 +52,14 @@ export class LocationEvidenceFusion {
    */
   static synthesize(params: {
     originRelay?: RouteHop;
+    clientSubmissionHop?: RouteHop;
     hops: RouteHop[];
     trackingEvents?: TrackingEvent[];
     senderAddress?: string;
     dateHeader?: string;
   }): MultiSignalGeoAttribution {
     const { originRelay, hops, trackingEvents = [], senderAddress = '', dateHeader } = params;
+    const clientSubmissionHop = params.clientSubmissionHop || hops.find((h) => h.isClientSubmission);
 
     const anomalies: string[] = [];
     const limitations: string[] = [
@@ -159,8 +161,8 @@ export class LocationEvidenceFusion {
           confidence: 80,
           confidenceLevel: 'HIGH',
           evidence: [
-            ...latestGenuine.geo.evidence,
-            `Verified human recipient interaction (${latestGenuine.eventType.toUpperCase()}) recorded at ${latestGenuine.timestamp}`,
+            ...((latestGenuine.geo as any).evidence || []),
+            `Verified human recipient interaction (${(latestGenuine.eventType || latestGenuine.type || '').toUpperCase()}) recorded at ${latestGenuine.timestamp}`,
           ],
         };
       }
@@ -172,7 +174,7 @@ export class LocationEvidenceFusion {
           confidence: 10,
           confidenceLevel: 'VERY_LOW',
           evidence: [
-            ...latestProxy.geo.evidence,
+            ...((latestProxy.geo as any).evidence || []),
             `Interaction captured via intermediary proxy (${latestProxy.proxyType}) at ${latestProxy.timestamp}`,
           ],
           limitations: [
@@ -213,7 +215,12 @@ export class LocationEvidenceFusion {
     let impossibleTravelDetected = false;
 
     // Check between Sending Infrastructure and Genuine Interaction
-    if (sendingInfrastructure && interactionLocation && sendingInfrastructure.latitude && interactionLocation.latitude) {
+    if (
+      sendingInfrastructure &&
+      interactionLocation &&
+      typeof sendingInfrastructure.latitude === 'number' &&
+      typeof interactionLocation.latitude === 'number'
+    ) {
       const check = LocationProfiler.checkImpossibleTravel(
         {
           latitude: sendingInfrastructure.latitude,
@@ -269,7 +276,170 @@ export class LocationEvidenceFusion {
     // =========================================================================
     let estimatedUserLocation: LocationHypothesis | null = null;
 
-    if (!sendingInfrastructure || !sendingInfrastructure.country) {
+    const hasClientSubmission = Boolean(
+      clientSubmissionHop &&
+      clientSubmissionHop.ip &&
+      !clientSubmissionHop.isPrivate &&
+      (clientSubmissionHop.geoAvailable || clientSubmissionHop.country || clientSubmissionHop.geo?.country)
+    );
+
+    if (hasClientSubmission && clientSubmissionHop) {
+      const cGeo = clientSubmissionHop.geo;
+      const cCountry = cGeo?.country || clientSubmissionHop.country || null;
+      const cCity = cGeo?.city || clientSubmissionHop.city || null;
+      const cLat = clientSubmissionHop.latitude ?? clientSubmissionHop.lat ?? cGeo?.latitude ?? cGeo?.lat ?? null;
+      const cLon = clientSubmissionHop.longitude ?? clientSubmissionHop.lon ?? cGeo?.longitude ?? cGeo?.lon ?? null;
+
+      const clientNetwork = NetworkClassifier.classify({
+        ip: clientSubmissionHop.ip,
+        asn: clientSubmissionHop.asn || cGeo?.asn,
+        org: clientSubmissionHop.org || cGeo?.org,
+        isp: clientSubmissionHop.isp || cGeo?.isp,
+        hostname: clientSubmissionHop.hostname,
+      });
+
+      if (clientNetwork.isVpnOrTor) {
+        estimatedUserLocation = {
+          country: `${cCountry || 'Unknown'} (VPN/Proxy Egress)`,
+          countryCode: cGeo?.countryCode || clientSubmissionHop.countryCode || null,
+          region: cGeo?.region || clientSubmissionHop.region || null,
+          city: cCity,
+          latitude: cLat,
+          longitude: cLon,
+          accuracyRadiusKm: 2500,
+          confidence: 20,
+          confidenceLevel: 'LOW',
+          networkType: clientNetwork.networkType,
+          asn: clientSubmissionHop.asn || cGeo?.asn || null,
+          isp: clientSubmissionHop.isp || cGeo?.isp || null,
+          organization: cGeo?.org || clientSubmissionHop.organization || null,
+          evidence: [
+            `Client MUA submission IP ${clientSubmissionHop.ip} is a known ${clientNetwork.providerCategory} gateway (X-Originating-IP).`,
+          ],
+          limitations: [
+            'Sender connected to webmail/submission MTA through an anonymizing VPN or Proxy.',
+            'Coordinates reflect proxy node, not physical user workstation.',
+          ],
+          sourceSignals: ['Client Submission Header (X-Originating-IP)', 'VPN/Tor Egress Gateway'],
+          hypothesisType: 'USER_ESTIMATE',
+        };
+      } else if (clientNetwork.isCloudOrHosting) {
+        estimatedUserLocation = {
+          country: 'Inconclusive (Cloud Submission Client)',
+          countryCode: null,
+          region: null,
+          city: null,
+          latitude: null,
+          longitude: null,
+          accuracyRadiusKm: 5000,
+          confidence: 25,
+          confidenceLevel: 'VERY_LOW',
+          networkType: clientNetwork.networkType,
+          asn: clientSubmissionHop.asn || cGeo?.asn || null,
+          isp: clientSubmissionHop.isp || cGeo?.isp || null,
+          organization: cGeo?.org || clientSubmissionHop.organization || null,
+          evidence: [
+            `Client submission header (X-Originating-IP) recorded datacenter/cloud IP: ${clientSubmissionHop.ip} (${clientNetwork.providerCategory}).`,
+          ],
+          limitations: [
+            'Client submitted message via automated cloud runner or remote virtual machine.',
+            'Physical user coordinates are decoupled from cloud hosting facility.',
+          ],
+          sourceSignals: ['Client Submission Header (X-Originating-IP)', 'Cloud Hosting Infrastructure'],
+          hypothesisType: 'USER_ESTIMATE',
+        };
+      } else if (clientNetwork.isResidentialOrMobile) {
+        let userConfidence = clientNetwork.networkType === 'RESIDENTIAL' ? 85 : 80;
+        const userEvidence: string[] = [
+          `Client MUA submission header (X-Originating-IP) recorded client device IP ${clientSubmissionHop.ip} [${cCity ? cCity + ', ' : ''}${cCountry}].`,
+          `Network classified as consumer broadband / mobile carrier (${clientNetwork.providerCategory} — ${clientSubmissionHop.isp || clientSubmissionHop.org || 'Consumer ISP'}).`,
+        ];
+        const userLimitations: string[] = [
+          `Consumer IP geolocation is accurate to metropolitan area (~${clientNetwork.accuracyEstimateKm} km radius), not exact physical dwelling.`,
+          'Client submission header inserted by upstream webmail or submission MTA.',
+        ];
+
+        const clientTzCheck = LocationProfiler.checkTimezoneDiscrepancy(dateHeader, undefined, cLon);
+        if (clientTzCheck.hasTimezoneMismatch) {
+          userConfidence -= GEO_ATTRIBUTION_WEIGHTS.timezoneMismatchPenalty;
+          userLimitations.push('Date header timezone conflicts with geographic longitude of client submission.');
+        } else {
+          userConfidence = Math.min(95, userConfidence + GEO_ATTRIBUTION_WEIGHTS.timezoneAlignmentBonus);
+          userEvidence.push('System timestamp timezone corroborates client geographic longitude.');
+        }
+
+        estimatedUserLocation = {
+          country: cCountry,
+          countryCode: cGeo?.countryCode || clientSubmissionHop.countryCode || null,
+          region: cGeo?.region || clientSubmissionHop.region || null,
+          city: cCity,
+          latitude: cLat,
+          longitude: cLon,
+          accuracyRadiusKm: clientNetwork.accuracyEstimateKm,
+          confidence: Math.max(10, Math.min(95, userConfidence)),
+          confidenceLevel: getConfidenceLevel(userConfidence),
+          networkType: clientNetwork.networkType,
+          asn: clientSubmissionHop.asn || cGeo?.asn || null,
+          isp: clientSubmissionHop.isp || cGeo?.isp || null,
+          organization: cGeo?.org || clientSubmissionHop.organization || null,
+          evidence: userEvidence,
+          limitations: userLimitations,
+          sourceSignals: ['Client Submission Header (X-Originating-IP)', 'Consumer Broadband/Mobile ISP'],
+          hypothesisType: 'USER_ESTIMATE',
+        };
+      } else {
+        // Corporate / Educational / Default
+        let userConfidence = clientNetwork.networkType === 'EDUCATIONAL' ? 80 : 70;
+        const userEvidence: string[] = [
+          `Client submission header (X-Originating-IP) recorded enterprise/campus network: ${clientSubmissionHop.organization || clientSubmissionHop.isp || 'Enterprise ASN'}.`,
+          `Resolved submission facility: ${cCity ? cCity + ', ' : ''}${cCountry}.`,
+        ];
+        const userLimitations: string[] = [
+          'Corporate network may route employee client sessions through centralized headquarter egress.',
+          'Client submission header was inserted by upstream webmail or submission MTA.',
+        ];
+
+        estimatedUserLocation = {
+          country: cCountry,
+          countryCode: cGeo?.countryCode || clientSubmissionHop.countryCode || null,
+          region: cGeo?.region || clientSubmissionHop.region || null,
+          city: cCity,
+          latitude: cLat,
+          longitude: cLon,
+          accuracyRadiusKm: clientNetwork.accuracyEstimateKm,
+          confidence: userConfidence,
+          confidenceLevel: getConfidenceLevel(userConfidence),
+          networkType: clientNetwork.networkType,
+          asn: clientSubmissionHop.asn || cGeo?.asn || null,
+          isp: clientSubmissionHop.isp || cGeo?.isp || null,
+          organization: cGeo?.org || clientSubmissionHop.organization || null,
+          evidence: userEvidence,
+          limitations: userLimitations,
+          sourceSignals: ['Client Submission Header (X-Originating-IP)', 'Enterprise Network'],
+          hypothesisType: 'USER_ESTIMATE',
+        };
+      }
+
+      // If sending infrastructure is in a different country, add competing hypothesis
+      if (sendingInfrastructure && sendingInfrastructure.country && sendingInfrastructure.country !== estimatedUserLocation.country) {
+        competingHypotheses.push({
+          country: sendingInfrastructure.country,
+          countryCode: sendingInfrastructure.countryCode,
+          region: sendingInfrastructure.region,
+          city: sendingInfrastructure.city,
+          latitude: sendingInfrastructure.latitude,
+          longitude: sendingInfrastructure.longitude,
+          accuracyRadiusKm: sendingInfrastructure.accuracyRadiusKm,
+          confidence: 30,
+          confidenceLevel: 'LOW',
+          networkType: sendingInfrastructure.networkType,
+          evidence: [`Outbound transport relay routed from ${sendingInfrastructure.city ? sendingInfrastructure.city + ', ' : ''}${sendingInfrastructure.country} (${infraNetwork.providerCategory}).`],
+          limitations: ['Transmitting mail server differs from client submission origin.'],
+          sourceSignals: ['Transport Origin Relay'],
+          hypothesisType: 'COMPETING',
+        });
+      }
+    } else if (!sendingInfrastructure || !sendingInfrastructure.country) {
       // Inconclusive / No public evidence
       estimatedUserLocation = {
         country: null,
@@ -460,6 +630,13 @@ export class LocationEvidenceFusion {
         sourceSignals: ['Enterprise Mail Infrastructure'],
         hypothesisType: 'USER_ESTIMATE',
       };
+    }
+
+    // Apply impossible travel penalty if detected
+    if (impossibleTravelDetected && estimatedUserLocation && estimatedUserLocation.confidence > 0) {
+      estimatedUserLocation.confidence = Math.max(10, estimatedUserLocation.confidence - GEO_ATTRIBUTION_WEIGHTS.impossibleTravelPenalty);
+      estimatedUserLocation.confidenceLevel = getConfidenceLevel(estimatedUserLocation.confidence);
+      estimatedUserLocation.limitations.push('Impossible travel velocity detected between route endpoints; certainty significantly degraded.');
     }
 
     // Overall confidence synthesis

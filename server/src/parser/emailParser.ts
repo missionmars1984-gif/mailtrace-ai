@@ -509,6 +509,62 @@ export class EmailParser {
       });
     }
 
+    // Check for client MUA submission headers (e.g. X-Originating-IP, X-Sender-IP, X-Client-IP)
+    let clientIp: string | undefined;
+    const clientHeaderKeys = ['x-originating-ip', 'x-sender-ip', 'x-client-ip'];
+    for (const key of clientHeaderKeys) {
+      const headerVal = parsed.headers.get(key);
+      if (headerVal) {
+        const valStr = typeof headerVal === 'string' ? headerVal : (typeof (headerVal as any).text === 'string' ? (headerVal as any).text : (Array.isArray(headerVal) ? headerVal.join(' ') : String(headerVal)));
+        const candidate = this.extractPrimaryIpFromHop(valStr);
+        if (candidate) {
+          clientIp = candidate;
+          break;
+        }
+      }
+    }
+
+    // Fallback scan of rawSource if not in parsed.headers
+    if (!clientIp && rawSource) {
+      const rawText = typeof rawSource === 'string' ? rawSource : rawSource.toString('utf-8');
+      const match = rawText.match(/^(?:x-originating-ip|x-sender-ip|x-client-ip)\s*:\s*([^\r\n]+)/im);
+      if (match) {
+        clientIp = this.extractPrimaryIpFromHop(match[1]);
+      }
+    }
+
+    if (clientIp) {
+      const alreadyPresent = hops.some((h) => h.ip === clientIp);
+      if (!alreadyPresent) {
+        const classification = GeoLocationProvider.isPrivateOrReserved(clientIp);
+        const clientHop: RouteHop = {
+          hopNumber: 1,
+          from: 'Client MUA (X-Originating-IP)',
+          by: hops[0]?.from || hops[0]?.by || 'Submission Gateway',
+          hostname: 'Client Device / Webmail Submission',
+          ip: clientIp,
+          timestamp: hops[0]?.timestamp,
+          isPrivate: classification.isPrivate,
+          isPublic: classification.type === 'PUBLIC',
+          ipType: classification.type,
+          classification: classification.type,
+          rawHopText: `X-Originating-IP: [${clientIp}]`,
+          rawReceivedHeader: `X-Originating-IP: [${clientIp}]`,
+          isClientSubmission: true,
+        };
+
+        hops.unshift(clientHop);
+        for (let i = 0; i < hops.length; i++) {
+          hops[i].hopNumber = i + 1;
+        }
+      } else {
+        const existing = hops.find((h) => h.ip === clientIp);
+        if (existing) {
+          existing.isClientSubmission = true;
+        }
+      }
+    }
+
     return hops;
   }
 

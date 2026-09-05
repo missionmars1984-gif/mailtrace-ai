@@ -116,7 +116,7 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
   });
 
   // 11. Route & Infrastructure enrichment with real GeoIP
-  const { hops, findings: infraFindings, diagnostic: geoDiagnostic, observedOriginRelay } = await InfrastructureAnalyzer.enrichHops(parsed.hops);
+  const { hops, findings: infraFindings, diagnostic: geoDiagnostic, observedOriginRelay, clientSubmissionHop } = await InfrastructureAnalyzer.enrichHops(parsed.hops, parsed.rawHeaders);
 
   // Update observed sendingIp with the verified observedOriginRelay
   if (observedOriginRelay?.ip) {
@@ -140,6 +140,7 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
   // 11c. Multi-Signal Geolocation & Attribution Engine Synthesis
   const geoAttribution = LocationEvidenceFusion.synthesize({
     originRelay: observedOriginRelay,
+    clientSubmissionHop,
     hops,
     trackingEvents: [],
     senderAddress: parsed.from.address,

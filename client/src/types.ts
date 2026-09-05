@@ -184,6 +184,7 @@ export interface RouteHop {
   reason?: string;
   isOrigin?: boolean;
   isPublicOriginRelay?: boolean;
+  isClientSubmission?: boolean;
   ipType?: IpClassificationType;
   classification?: IpClassificationType;
   rawHopText?: string;

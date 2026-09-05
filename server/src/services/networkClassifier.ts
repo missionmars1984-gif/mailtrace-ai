@@ -64,9 +64,10 @@ export class NetworkClassifier {
 
     // 2. Check for Google Image Proxy
     const isGoogleImageProxyUa = ua.includes('googleimageproxy') || ua.includes('ggpht.com') || ua.includes('feedfetcher-google');
+    const isGoogleImageProxyHostOrOrg = host.includes('google-image-proxy') || combined.includes('google image proxy');
     const isGoogleNetwork = combined.includes('google llc') || asn === 'AS15169' || asn === 'AS396982';
 
-    if (isGoogleImageProxyUa || (isGoogleNetwork && ua.includes('google'))) {
+    if (isGoogleImageProxyUa || isGoogleImageProxyHostOrOrg || (isGoogleNetwork && ua.includes('google'))) {
       indicators.push('Google Image Proxy prefetch service detected (Mountain View / Google CDN)');
       return {
         networkType: 'PROXY',
@@ -118,6 +119,8 @@ export class NetworkClassifier {
       combined.includes('tor relay') ||
       combined.includes('torservers') ||
       combined.includes('the onion router') ||
+      combined.includes('artikel10') ||
+      combined.includes('artikel 10') ||
       host.includes('tor-exit');
 
     if (isTor) {

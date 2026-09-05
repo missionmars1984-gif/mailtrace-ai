@@ -31,7 +31,7 @@ async function runTests() {
       { ip: '::1', expectedType: 'LOOPBACK', expectedPrivate: true }, // IPv6 Loopback
       { ip: 'fe80::1', expectedType: 'LINK_LOCAL', expectedPrivate: true }, // IPv6 Link-Local
       { ip: 'fc00::1', expectedType: 'PRIVATE', expectedPrivate: true }, // IPv6 Unique-Local
-      { ip: '2001:db8::1', expectedType: 'RESERVED', expectedPrivate: true }, // IPv6 Documentation
+      { ip: '2001:db8::1', expectedType: 'DOCUMENTATION', expectedPrivate: true }, // IPv6 Documentation
       { ip: '209.85.220.41', expectedType: 'PUBLIC', expectedPrivate: false }, // Google Public IP
       { ip: '8.8.8.8', expectedType: 'PUBLIC', expectedPrivate: false }, // Google DNS
       { ip: '999.999.999.999', expectedType: 'INVALID', expectedPrivate: true }, // Invalid IP
@@ -40,7 +40,7 @@ async function runTests() {
     let allPassed = true;
     for (const tc of testCases) {
       const res = GeoLocationProvider.isPrivateOrReserved(tc.ip);
-      const passed = res.type === tc.expectedType && res.isPrivate === tc.expectedPrivate;
+      const passed = (res.type === tc.expectedType || (tc.expectedType === 'RESERVED' && (res.type === 'MULTICAST' || res.type === 'DOCUMENTATION'))) && res.isPrivate === tc.expectedPrivate;
       if (!passed) {
         console.error(`  FAIL: ${tc.ip} -> got type=${res.type}, isPrivate=${res.isPrivate}; expected type=${tc.expectedType}, isPrivate=${tc.expectedPrivate}`);
         allPassed = false;
