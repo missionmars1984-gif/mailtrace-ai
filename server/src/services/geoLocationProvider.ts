@@ -356,29 +356,82 @@ export class GeoLocationProvider implements IGeoLocationProvider {
     }
 
     // 3. Fetch live data from real GeoIP service
-    // Primary: ip-api.com
-    // Fallback: ipwho.is
-    const lookupTimeoutMs = 4000;
+    // Primary: geojs.io (HTTPS, fast, reliable)
+    // Secondary: freeipapi.com (HTTPS, rich metadata)
+    // Fallback: ipwho.is / ip-api.com
+    const lookupTimeoutMs = 6000;
 
-    // Strategy A: Primary ip-api.com
+    // Strategy 0: Custom GEOIP_API_URL if configured
+    if (process.env.GEOIP_API_URL) {
+      try {
+        const customUrl = `${process.env.GEOIP_API_URL.replace(/\/$/, '')}/${encodeURIComponent(cleanIp)}`;
+        console.log(`[GeoIP] Provider request (custom): ${customUrl}`);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), lookupTimeoutMs);
+        const headers: Record<string, string> = { 'User-Agent': 'MailTrace-AI-Forensics/1.0' };
+        if (process.env.GEOIP_API_KEY) headers['Authorization'] = `Bearer ${process.env.GEOIP_API_KEY}`;
+        const res = await fetch(customUrl, { signal: controller.signal, headers });
+        clearTimeout(timer);
+        if (res.ok) {
+          const data = (await res.json()) as any;
+          const lat = typeof data.latitude === 'number' ? data.latitude : (typeof data.lat === 'number' ? data.lat : parseFloat(data.latitude || data.lat));
+          const lon = typeof data.longitude === 'number' ? data.longitude : (typeof data.lon === 'number' ? data.lon : parseFloat(data.longitude || data.lon));
+          const validCoords = !isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 && !(lat === 0 && lon === 0);
+          if (data.country || data.countryName) {
+            const country = data.country || data.countryName;
+            const city = data.city || data.cityName || null;
+            const result: GeoLocationData = {
+              ip: cleanIp,
+              classification: 'PUBLIC',
+              geoAvailable: validCoords,
+              country,
+              countryCode: data.countryCode || data.country_code || null,
+              region: data.region || data.regionName || null,
+              city,
+              postalCode: data.postal || data.zip || null,
+              latitude: validCoords ? lat : null,
+              longitude: validCoords ? lon : null,
+              lat: validCoords ? lat : null,
+              lon: validCoords ? lon : null,
+              timezone: data.timezone || null,
+              asn: data.asn ? (String(data.asn).startsWith('AS') ? String(data.asn) : `AS${data.asn}`) : null,
+              organization: data.org || data.organization || null,
+              org: data.org || data.organization || null,
+              isp: data.isp || null,
+              network: null,
+              provider: 'custom',
+              lookupTimestamp: new Date().toISOString(),
+              error: null,
+              isPrivate: false,
+              isPublic: true,
+              location: city ? `${city}, ${country}` : country,
+              reason: undefined,
+              ipType: 'PUBLIC',
+              lookupStatus: 'resolved',
+              statusMessage: 'Resolved via live GeoIP provider',
+              source: 'custom',
+            };
+            try { DatabaseService.cacheGeoLocation(cleanIp, result); } catch {}
+            return result;
+          }
+        }
+      } catch (err: any) {
+        console.log(`[GeoIP] Custom provider failed: ${err.message || err}`);
+      }
+    }
+
+    // Strategy 1: Primary - GeoJS (HTTPS, fast, robust)
     try {
-      const primaryUrl = process.env.GEOIP_API_URL
-        ? `${process.env.GEOIP_API_URL.replace(/\/$/, '')}/${encodeURIComponent(cleanIp)}`
-        : `http://ip-api.com/json/${encodeURIComponent(cleanIp)}?fields=status,message,country,countryCode,regionName,city,zip,lat,lon,timezone,isp,org,as,query`;
-
-      console.log(`[GeoIP] Provider request: ${primaryUrl}`);
+      const geoJsUrl = `https://get.geojs.io/v1/ip/geo/${encodeURIComponent(cleanIp)}.json`;
+      console.log(`[GeoIP] Provider request: ${geoJsUrl}`);
 
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), lookupTimeoutMs);
 
-      const headers: Record<string, string> = {
-        'User-Agent': 'MailTrace-AI-Forensics/1.0',
-      };
-      if (process.env.GEOIP_API_KEY) {
-        headers['Authorization'] = `Bearer ${process.env.GEOIP_API_KEY}`;
-      }
-
-      const res = await fetch(primaryUrl, { signal: controller.signal, headers });
+      const res = await fetch(geoJsUrl, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'MailTrace-AI-Forensics/1.0' },
+      });
       clearTimeout(timer);
 
       console.log(`[GeoIP] Provider HTTP status: ${res.status}`);
@@ -387,11 +440,11 @@ export class GeoLocationProvider implements IGeoLocationProvider {
         const data = (await res.json()) as any;
         console.log(`[GeoIP] Provider response received`);
 
-        if (data && data.status === 'success') {
-          const lat = typeof data.lat === 'number' && !isNaN(data.lat) && data.lat >= -90 && data.lat <= 90 ? data.lat : null;
-          const lon = typeof data.lon === 'number' && !isNaN(data.lon) && data.lon >= -180 && data.lon <= 180 ? data.lon : null;
-          const validCoords = lat !== null && lon !== null && !(lat === 0 && lon === 0);
-          const parsedAsn = data.as ? data.as.split(' ')[0] : null;
+        if (data && data.country) {
+          const lat = parseFloat(data.latitude);
+          const lon = parseFloat(data.longitude);
+          const validCoords = !isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 && !(lat === 0 && lon === 0);
+          const parsedAsn = data.asn ? (String(data.asn).startsWith('AS') ? String(data.asn) : `AS${data.asn}`) : null;
 
           console.log(`[GeoIP] Country: ${data.country || 'N/A'}`);
           console.log(`[GeoIP] City: ${data.city || 'N/A'}`);
@@ -405,21 +458,21 @@ export class GeoLocationProvider implements IGeoLocationProvider {
             classification: 'PUBLIC',
             geoAvailable: validCoords,
             country: data.country || null,
-            countryCode: data.countryCode || null,
-            region: data.regionName || null,
+            countryCode: data.country_code || null,
+            region: data.region || null,
             city: data.city || null,
-            postalCode: data.zip || null,
+            postalCode: data.area_code ? String(data.area_code) : null,
             latitude: validCoords ? lat : null,
             longitude: validCoords ? lon : null,
             lat: validCoords ? lat : null,
             lon: validCoords ? lon : null,
             timezone: data.timezone || null,
             asn: parsedAsn,
-            organization: data.org || null,
-            org: data.org || null,
-            isp: data.isp || null,
+            organization: data.organization || data.organization_name || null,
+            org: data.organization || data.organization_name || null,
+            isp: data.organization_name || data.organization || null,
             network: null,
-            provider: 'ip-api.com',
+            provider: 'geojs.io',
             lookupTimestamp: new Date().toISOString(),
             error: null,
             isPrivate: false,
@@ -429,7 +482,7 @@ export class GeoLocationProvider implements IGeoLocationProvider {
             ipType: 'PUBLIC',
             lookupStatus: 'resolved',
             statusMessage: 'Resolved via live GeoIP provider',
-            source: 'ip-api.com',
+            source: 'geojs.io',
           };
 
           // Cache in SQLite
@@ -438,15 +491,90 @@ export class GeoLocationProvider implements IGeoLocationProvider {
           } catch {}
 
           return result;
-        } else if (data && data.status === 'fail') {
-          console.log(`[GeoIP] Provider error: ${data.message || 'Lookup failed'}`);
         }
       }
     } catch (err: any) {
-      console.log(`[GeoIP] Provider error: ${err.message || err}`);
+      console.log(`[GeoIP] Primary provider (geojs) error: ${err.message || err}`);
     }
 
-    // Strategy B: Fallback to ipwho.is if primary is rate limited or unavailable
+    // Strategy 2: Secondary - FreeIPAPI (HTTPS)
+    try {
+      const freeIpUrl = `https://freeipapi.com/api/json/${encodeURIComponent(cleanIp)}`;
+      console.log(`[GeoIP] Provider request (FreeIPAPI): ${freeIpUrl}`);
+
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), lookupTimeoutMs);
+
+      const res = await fetch(freeIpUrl, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'MailTrace-AI-Forensics/1.0' },
+      });
+      clearTimeout(timer);
+
+      console.log(`[GeoIP] Provider HTTP status (FreeIPAPI): ${res.status}`);
+
+      if (res.ok) {
+        const data = (await res.json()) as any;
+        console.log(`[GeoIP] Provider response received (FreeIPAPI)`);
+
+        if (data && (data.countryName || data.countryCode)) {
+          const lat = typeof data.latitude === 'number' ? data.latitude : parseFloat(data.latitude);
+          const lon = typeof data.longitude === 'number' ? data.longitude : parseFloat(data.longitude);
+          const validCoords = !isNaN(lat) && !isNaN(lon) && lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180 && !(lat === 0 && lon === 0);
+          const parsedAsn = data.asn ? (String(data.asn).startsWith('AS') ? String(data.asn) : `AS${data.asn}`) : null;
+
+          console.log(`[GeoIP] Country: ${data.countryName || 'N/A'}`);
+          console.log(`[GeoIP] City: ${data.cityName || 'N/A'}`);
+          console.log(`[GeoIP] ASN: ${parsedAsn || 'N/A'}`);
+          console.log(`[GeoIP] Latitude: ${validCoords ? lat : 'None'}`);
+          console.log(`[GeoIP] Longitude: ${validCoords ? lon : 'None'}`);
+          console.log(`[GeoIP] Lookup completed`);
+
+          const result: GeoLocationData = {
+            ip: cleanIp,
+            classification: 'PUBLIC',
+            geoAvailable: validCoords,
+            country: data.countryName || null,
+            countryCode: data.countryCode || null,
+            region: data.regionName || null,
+            city: data.cityName || null,
+            postalCode: data.zipCode || null,
+            latitude: validCoords ? lat : null,
+            longitude: validCoords ? lon : null,
+            lat: validCoords ? lat : null,
+            lon: validCoords ? lon : null,
+            timezone: data.timeZone || null,
+            asn: parsedAsn,
+            organization: data.asnOrganization || null,
+            org: data.asnOrganization || null,
+            isp: data.asnOrganization || null,
+            network: null,
+            provider: 'freeipapi.com',
+            lookupTimestamp: new Date().toISOString(),
+            error: null,
+            isPrivate: false,
+            isPublic: true,
+            location: data.countryName ? (data.cityName ? `${data.cityName}, ${data.countryName}` : data.countryName) : null,
+            reason: undefined,
+            ipType: 'PUBLIC',
+            lookupStatus: 'resolved',
+            statusMessage: 'Resolved via live GeoIP provider',
+            source: 'freeipapi.com',
+          };
+
+          // Cache in SQLite
+          try {
+            DatabaseService.cacheGeoLocation(cleanIp, result);
+          } catch {}
+
+          return result;
+        }
+      }
+    } catch (err: any) {
+      console.log(`[GeoIP] FreeIPAPI error: ${err.message || err}`);
+    }
+
+    // Strategy 3: Fallback - ipwho.is
     try {
       const fallbackUrl = `https://ipwho.is/${encodeURIComponent(cleanIp)}`;
       console.log(`[GeoIP] Provider request (fallback): ${fallbackUrl}`);

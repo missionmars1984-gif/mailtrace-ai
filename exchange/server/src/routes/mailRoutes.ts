@@ -136,6 +136,17 @@ const handleSend = async (req: Request, res: Response) => {
       contentType: f.mimetype,
     }));
 
+    // Detect client IP from reverse proxy / Cloudflare tunnel or default to user India IP
+    const cfConnectingIp = req.headers['cf-connecting-ip'] as string | undefined;
+    const xForwardedFor = req.headers['x-forwarded-for'];
+    let clientIp = cfConnectingIp?.trim();
+    if (!clientIp && xForwardedFor) {
+      clientIp = (Array.isArray(xForwardedFor) ? xForwardedFor[0] : xForwardedFor).split(',')[0].trim();
+    }
+    if (!clientIp || clientIp === '127.0.0.1' || clientIp === '::1' || clientIp.startsWith('192.168.') || clientIp.startsWith('10.')) {
+      clientIp = process.env.CLIENT_PUBLIC_IP || '223.185.101.157';
+    }
+
     const result = await SmtpService.sendMail({
       to: to.split(',').map(s => s.trim()).filter(Boolean),
       cc: cc ? String(cc).split(',').map(s => s.trim()).filter(Boolean) : undefined,
@@ -144,6 +155,7 @@ const handleSend = async (req: Request, res: Response) => {
       text: String(text || ''),
       html: html ? String(html) : undefined,
       attachments,
+      clientIp,
     });
 
     if (!result.success) {

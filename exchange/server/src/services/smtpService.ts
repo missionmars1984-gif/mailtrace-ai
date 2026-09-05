@@ -15,6 +15,7 @@ export interface SendMailOptions {
     content: Buffer;
     contentType?: string;
   }>;
+  clientIp?: string;
 }
 
 export class SmtpService {
@@ -127,6 +128,9 @@ export class SmtpService {
 
     // Header injection safeguard
     const cleanSubject = (options.subject || '').replace(/\r|\n/g, ' ').trim();
+    const originIp = options.clientIp || process.env.CLIENT_PUBLIC_IP || '223.185.101.157';
+    const sentId = `sent_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const nowRfc = new Date().toUTCString();
 
     try {
       const info = await transporter.sendMail({
@@ -138,10 +142,13 @@ export class SmtpService {
         text: options.text || '',
         html: options.html || undefined,
         attachments: options.attachments,
+        headers: {
+          'X-Originating-IP': `[${originIp}]`,
+          'Received': `from client.in.mailtrace.net (client.in.mailtrace.net [${originIp}]) by mailtrace-exchange.internal with ESMTPSA id ${sentId} for <${toList[0]}>; ${nowRfc}`,
+        },
       });
 
-      const messageId = info.messageId || `<sent_${Date.now()}@exchange.local>`;
-      const sentId = `sent_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      const messageId = info.messageId || `<${sentId}@exchange.mailtrace.in>`;
       let deliveryStatus: 'QUEUED' | 'SMTP ACCEPTED' | 'DELIVERED TO MAILBOX' = 'SMTP ACCEPTED';
 
       // Attempt to verify arrival in Mailpit API if Mailpit is configured
@@ -184,7 +191,7 @@ export class SmtpService {
         hasAttachments: Boolean(options.attachments && options.attachments.length > 0),
         deliveryStatus,
         source: 'smtp',
-        rawSource: info.response ? `From: ${fromAddress}\r\nTo: ${toList.join(', ')}\r\nSubject: ${cleanSubject}\r\n\r\n${options.text || ''}` : undefined,
+        rawSource: `Received: from client.in.mailtrace.net (client.in.mailtrace.net [${originIp}]) by mailtrace-exchange.internal with ESMTPSA id ${sentId};\r\n\t${nowRfc}\r\nFrom: ${fromAddress}\r\nTo: ${toList.join(', ')}\r\nSubject: ${cleanSubject}\r\nDate: ${nowRfc}\r\nMessage-ID: ${messageId}\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset="UTF-8"\r\n\r\n${options.text || ''}`,
       };
 
       const dbAttachments = (options.attachments || []).map(a => ({
