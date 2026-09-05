@@ -56,6 +56,9 @@ export class EmailParser {
       }
     }
 
+    // Collapse accidental blank lines that occur within the header section before the true body
+    rawText = this.sanitizeHeaderBlankLines(rawText);
+
     const parsed = await simpleParser(rawText);
 
     // 1. From
@@ -442,15 +445,14 @@ export class EmailParser {
       }
     }
 
-    // 3. Fallback regex scan of raw message headers block if still empty
+    // 3. Fallback regex scan of raw message text if still empty
     if (stringList.length === 0 && rawSource) {
       const rawText = typeof rawSource === 'string' ? rawSource : rawSource.toString('utf-8');
-      const headerSection = rawText.split(/\r?\n\r?\n/)[0] || '';
       const rawRegex = /^received:\s*([\s\S]*?)(?=\r?\n[^\t\s]|$)/gim;
       let match: RegExpExecArray | null;
-      while ((match = rawRegex.exec(headerSection)) !== null) {
+      while ((match = rawRegex.exec(rawText)) !== null) {
         const cleaned = match[1].replace(/\r?\n[\t\s]+/g, ' ').trim();
-        if (cleaned) {
+        if (cleaned && !stringList.includes(cleaned)) {
           stringList.push(cleaned);
         }
       }
@@ -627,5 +629,46 @@ export class EmailParser {
     }
 
     return candidates;
+  }
+
+  /**
+   * Sanitizes accidental blank lines that occur within the email header section.
+   * In RFC 5322, the header block terminates at the first blank line. However,
+   * when users copy-paste raw emails or generate test cases, blank lines are frequently
+   * inserted between headers (e.g. between Content-Type: and Received:).
+   * This method collapses blank lines when the subsequent non-empty line is an RFC header.
+   */
+  private static sanitizeHeaderBlankLines(rawText: string): string {
+    const knownHeaderPattern = /^(?:received|from|to|cc|bcc|subject|date|message-id|mime-version|content-type|content-transfer-encoding|return-path|reply-to|dkim-signature|authentication-results|received-spf|x-[a-zA-Z0-9_\-]+)\s*:/i;
+
+    const lines = rawText.split(/\r?\n/);
+    const result: string[] = [];
+    let inHeaderSection = true;
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      if (inHeaderSection && line.trim() === '') {
+        // Look ahead to check if the next non-empty line is an RFC header
+        let nextLine = '';
+        for (let j = i + 1; j < lines.length; j++) {
+          if (lines[j].trim() !== '') {
+            nextLine = lines[j];
+            break;
+          }
+        }
+        if (nextLine && knownHeaderPattern.test(nextLine)) {
+          // Headers continue after this blank line -> collapse the blank line
+          continue;
+        } else {
+          // Boundary between headers and body reached
+          inHeaderSection = false;
+          result.push(line);
+        }
+      } else {
+        result.push(line);
+      }
+    }
+
+    return result.join('\r\n');
   }
 }
