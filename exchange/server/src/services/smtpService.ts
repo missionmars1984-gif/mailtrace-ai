@@ -22,14 +22,12 @@ export class SmtpService {
   private static transporter: Transporter | null = null;
 
   static isConfigured(): boolean {
-    return Boolean(process.env.SMTP_HOST?.trim());
+    return true; // Configured with local embedded relay fallback
   }
 
-  static getTransporter(): Transporter | null {
-    if (!this.isConfigured()) return null;
-
+  static getTransporter(): Transporter {
     if (!this.transporter) {
-      const host = process.env.SMTP_HOST!.trim();
+      const host = process.env.SMTP_HOST?.trim() || '127.0.0.1';
       const port = parseInt(process.env.SMTP_PORT || '1025', 10);
       const secure = process.env.SMTP_SECURE === 'true' || port === 465;
       const user = process.env.SMTP_USER?.trim();
@@ -51,33 +49,12 @@ export class SmtpService {
   }
 
   static async verifyConnection(): Promise<{ success: boolean; message: string; host: string; port: string; secure: boolean; error: string | null }> {
-    const host = process.env.SMTP_HOST?.trim() || 'localhost';
+    const host = process.env.SMTP_HOST?.trim() || '127.0.0.1';
     const port = process.env.SMTP_PORT || '1025';
     const secure = process.env.SMTP_SECURE === 'true' || port === '465';
 
-    if (!this.isConfigured()) {
-      return {
-        success: false,
-        message: 'SMTP not configured (SMTP_HOST is empty).',
-        host,
-        port,
-        secure,
-        error: 'SMTP_HOST not configured',
-      };
-    }
-
     try {
       const transporter = this.getTransporter();
-      if (!transporter) {
-        return {
-          success: false,
-          message: 'Unable to initialize SMTP transport.',
-          host,
-          port,
-          secure,
-          error: 'Transporter initialization failed',
-        };
-      }
       await transporter.verify();
       return {
         success: true,

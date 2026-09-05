@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { mailRouter } from './routes/mailRoutes.js';
 import { MailboxService } from './services/mailboxService.js';
 import { SmtpService } from './services/smtpService.js';
+import { EmbeddedSmtpServer } from './services/embeddedSmtpServer.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -47,9 +48,13 @@ if (fs.existsSync(clientDist)) {
 
 // Start Server
 app.listen(PORT, async () => {
+  // Start Embedded SMTP Relay Server on port 1025 if local relay
+  const smtpPort = parseInt(process.env.SMTP_PORT || '1025', 10);
+  await EmbeddedSmtpServer.start(smtpPort);
+
   console.log('=======================================================');
   console.log(` ✉️  MailTrace Exchange Server running on http://localhost:${PORT}`);
-  console.log(` 📤 SMTP Relay: ${SmtpService.isConfigured() ? process.env.SMTP_HOST + ':' + (process.env.SMTP_PORT || '1025') : 'NOT CONFIGURED'}`);
+  console.log(` 📤 SMTP Relay: ${process.env.SMTP_HOST || '127.0.0.1'}:${process.env.SMTP_PORT || '1025'}`);
   console.log(` 📥 Mailbox Receiver: ${MailboxService.getMode()}`);
   console.log(` 🛡️  SOC Forwarding Bridge: ${process.env.SOC_BACKEND_URL ? 'ACTIVE (' + process.env.SOC_BACKEND_URL + ')' : 'DISABLED'}`);
   console.log('=======================================================');

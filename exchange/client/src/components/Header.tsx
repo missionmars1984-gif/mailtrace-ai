@@ -81,7 +81,7 @@ export const Header: React.FC<HeaderProps> = ({
             ) : (
               <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
             )}
-            <span>{status?.smtpConnected ? 'SMTP Active' : 'SMTP Offline'}</span>
+            <span>{status?.smtpConnected ? 'SMTP Online' : 'SMTP Offline'}</span>
           </div>
 
           {/* Mailbox Status */}
@@ -93,12 +93,16 @@ export const Header: React.FC<HeaderProps> = ({
             }`}
             title={
               status?.mailboxConnected
-                ? `${status?.mailboxMessage || 'Connected to Mailpit'} (Latency: ${status?.latencyMs ?? 1}ms)`
+                ? `${status?.mailboxMessage || 'Connected to Mailbox Service'} (Latency: ${status?.latencyMs ?? 1}ms)`
                 : `Mailbox Offline: ${status?.mailboxMessage || 'Cannot connect to mail service'}`
             }
           >
             <span className={`w-2 h-2 rounded-full ${status?.mailboxConnected ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-            <span>{status?.mailboxConnected ? 'Mailpit Online' : 'Mailpit Offline'}</span>
+            <span>
+              {status?.mailboxConnected
+                ? (status?.mode?.includes('Mailpit') ? 'Mailpit Online' : 'Mailbox Active')
+                : 'Mailbox Offline'}
+            </span>
           </div>
         </div>
 
