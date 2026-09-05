@@ -8,3 +8,13 @@ services:
     envVars:
       - key: NODE_VERSION
         value: 22.13.0
+
+  - type: web
+    name: mailtrace-exchange
+    env: node
+    plan: free
+    buildCommand: npm run build:exchange
+    startCommand: npm run start:exchange
+    envVars:
+      - key: NODE_VERSION
+        value: 22.13.0

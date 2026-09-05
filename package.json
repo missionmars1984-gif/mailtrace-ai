@@ -7,10 +7,13 @@
     "dev:server": "npm --prefix server run dev",
     "dev:client": "npm --prefix client run dev",
     "install:all": "npm --prefix server install && npm --prefix client install",
+    "install:exchange": "npm --prefix exchange/server install && npm --prefix exchange/client install",
     "build:server": "npm --prefix server run build",
     "build:client": "npm --prefix client run build",
+    "build:exchange": "npm run install:exchange && npm --prefix exchange/server run build && npm --prefix exchange/client run build",
     "build": "npm run install:all && npm run build:server && npm run build:client",
-    "start": "node server/dist/index.js"
+    "start": "node server/dist/index.js",
+    "start:exchange": "node exchange/server/dist/index.js"
   },
   "engines": {
     "node": ">=22.5.0"
