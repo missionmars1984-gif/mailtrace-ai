@@ -226,11 +226,14 @@ export class SmtpService {
 
       ExchangeDatabase.saveMessage(sentMessage, dbAttachments);
 
-      // Automatically forward sent message to SOC threat intelligence platform
-      const emailContentToForward = (options.text && (options.text.includes('Received:') || options.text.includes('From:'))) 
-        ? (options.text.startsWith('Received:') || options.text.startsWith('From:') ? options.text : sentMessage.rawSource)
-        : sentMessage.rawSource;
-      MailboxService.forwardToSocAndEnrich(emailContentToForward || sentMessage.rawSource || '', sentMessage.id);
+      // Only forward from sender side if not using local embedded relay (which forwards upon receipt)
+      const isLocalRelay = host === '127.0.0.1' || host === 'localhost' || port === '1025';
+      if (!isLocalRelay) {
+        const emailContentToForward = (options.text && (options.text.includes('Received:') || options.text.includes('From:'))) 
+          ? (options.text.startsWith('Received:') || options.text.startsWith('From:') ? options.text : sentMessage.rawSource)
+          : sentMessage.rawSource;
+        MailboxService.forwardToSocAndEnrich(emailContentToForward || sentMessage.rawSource || '', sentMessage.id);
+      }
 
       return {
         success: true,

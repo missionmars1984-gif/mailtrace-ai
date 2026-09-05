@@ -49,6 +49,12 @@ export async function runAnalysisPipeline(rawEmailContent: string | Buffer): Pro
   // 1. Parse raw email & extract RFC822 envelope and body structures
   const parsed = await EmailParser.parse(rawEmailContent);
 
+  // Deduplication check: Avoid opening duplicate cases for simultaneous send/receive webhooks
+  const existingCase = DatabaseService.findExistingCase(parsed.messageId, parsed.subject, parsed.from.address);
+  if (existingCase) {
+    return existingCase;
+  }
+
   // 2. Identify sending IP from earliest public origin hop or chronological Hop #1
   const originHop = parsed.hops.find((h) => h.ip && !GeoLocationProvider.isPrivateOrReserved(h.ip).isPrivate) || parsed.hops[0];
   const sendingIp = originHop?.ip;

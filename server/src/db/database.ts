@@ -329,6 +329,42 @@ export class DatabaseService {
     }
   }
 
+  /**
+   * Checks if an identical or burst duplicate email has already been analyzed.
+   * Prevents duplicate case generation when mail systems trigger simultaneous send/receive webhooks.
+   */
+  static findExistingCase(messageId?: string, subject?: string, fromAddr?: string): CaseRecord | null {
+    try {
+      // 1. Check by valid Message-ID first if present
+      if (messageId && messageId.trim() && messageId !== '<>' && !messageId.startsWith('<inbox_') && !messageId.startsWith('<sent_')) {
+        const cleanMsgId = messageId.replace(/["'\\]/g, '').trim();
+        const stmt = db.prepare(`SELECT data_json FROM cases WHERE data_json LIKE ? ORDER BY created_at DESC LIMIT 1`);
+        const row = stmt.get(`%"messageId":"${cleanMsgId}"%`) as { data_json: string } | undefined;
+        if (row) {
+          try { return JSON.parse(row.data_json); } catch {}
+        }
+      }
+
+      // 2. Check for duplicate burst ingestion within 30 seconds with identical Subject and Sender
+      if (subject && fromAddr) {
+        const stmt = db.prepare(`
+          SELECT data_json, created_at FROM cases 
+          WHERE subject = ? AND sender_from LIKE ? 
+          ORDER BY created_at DESC LIMIT 1
+        `);
+        const row = stmt.get(subject.trim(), `%${fromAddr.trim()}%`) as { data_json: string; created_at: string } | undefined;
+        if (row) {
+          const elapsed = Math.abs(Date.now() - new Date(row.created_at).getTime());
+          if (elapsed < 30000) { // within 30 seconds
+            try { return JSON.parse(row.data_json); } catch {}
+          }
+        }
+      }
+    } catch {}
+
+    return null;
+  }
+
   static getCachedGeoLocation(ip: string): GeoLocationData | null {
     if (!ip) return null;
     try {
