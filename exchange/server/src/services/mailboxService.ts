@@ -4,6 +4,10 @@ import type { ExchangeMessage, ExchangeAddress } from '../types/index.js';
 
 export class MailboxService {
   private static isSyncing = false;
+  private static wsClient: any = null;
+  private static reconnectTimer: any = null;
+  private static reconnectDelay = 1000;
+  private static isStreamActive = false;
 
   static isConfigured(): boolean {
     return Boolean(process.env.MAILPIT_API_URL?.trim() || process.env.IMAP_HOST?.trim());
@@ -15,20 +19,23 @@ export class MailboxService {
     return 'Unconfigured';
   }
 
-  static async verifyConnection(): Promise<{ success: boolean; message: string }> {
+  static async verifyConnection(): Promise<{ success: boolean; message: string; latencyMs?: number }> {
     if (!this.isConfigured()) {
       return { success: false, message: 'Mailbox connection not configured (neither MAILPIT_API_URL nor IMAP_HOST provided).' };
     }
 
     if (process.env.MAILPIT_API_URL?.trim()) {
       const url = process.env.MAILPIT_API_URL.replace(/\/$/, '');
+      const startTime = Date.now();
       try {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 3000);
         const res = await fetch(`${url}/api/v1/info`, { signal: controller.signal });
         clearTimeout(timeout);
+        const latencyMs = Date.now() - startTime;
         if (res.ok) {
-          return { success: true, message: `Connected to Mailpit server at ${url}` };
+          ExchangeDatabase.setSyncState('last_connected_at', new Date().toISOString());
+          return { success: true, message: `Connected to Mailpit server at ${url}`, latencyMs };
         }
         return { success: false, message: `Mailpit returned status HTTP ${res.status}` };
       } catch (err: any) {
@@ -36,118 +43,269 @@ export class MailboxService {
       }
     }
 
-    // IMAP Connection verify
     return { success: true, message: `Configured for IMAP host ${process.env.IMAP_HOST}` };
   }
 
   /**
-   * Synchronizes remote incoming messages into the local SQLite store.
-   * Preserves raw RFC 822 source and forwards to MailTrace SOC background ingestion.
+   * Initializes real-time WebSocket connection to Mailpit event stream (/api/events).
+   * Automatically reconnects with exponential backoff on disconnect.
    */
-  static async sync(): Promise<{ newCount: number; error?: string }> {
-    if (this.isSyncing) return { newCount: 0 };
+  static startEventStream(): void {
+    if (this.isStreamActive) return;
+    this.isStreamActive = true;
+    this.connectWebSocket();
+  }
+
+  private static connectWebSocket(): void {
+    const rawUrl = process.env.MAILPIT_API_URL?.trim();
+    if (!rawUrl) return;
+
+    try {
+      const wsUrl = rawUrl.replace(/^http:/, 'ws:').replace(/^https:/, 'wss:').replace(/\/$/, '') + '/api/events';
+      const ws = new (globalThis as any).WebSocket(wsUrl);
+      this.wsClient = ws;
+
+      ws.onopen = () => {
+        console.log(`[MailboxService] Real-time WebSocket connected to Mailpit: ${wsUrl}`);
+        this.reconnectDelay = 1000;
+        ExchangeDatabase.setSyncState('last_connected_at', new Date().toISOString());
+      };
+
+      ws.onmessage = async (event: any) => {
+        try {
+          const payload = typeof event.data === 'string' ? JSON.parse(event.data) : null;
+          if (payload && payload.Type === 'new' && payload.Data?.ID) {
+            console.log(`[MailboxService] Real-time new email event received: ${payload.Data.ID} ("${payload.Data.Subject || ''}")`);
+            await this.ingestMailpitMessage(payload.Data.ID);
+          }
+        } catch (err) {
+          console.warn('[MailboxService] Error processing WebSocket event:', err);
+        }
+      };
+
+      ws.onclose = () => {
+        this.scheduleReconnect();
+      };
+
+      ws.onerror = (err: any) => {
+        console.warn('[MailboxService] WebSocket connection error:', err.message || err);
+        try { ws.close(); } catch {}
+        this.scheduleReconnect();
+      };
+    } catch (err) {
+      console.warn('[MailboxService] Could not establish WebSocket:', err);
+      this.scheduleReconnect();
+    }
+  }
+
+  private static scheduleReconnect(): void {
+    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    this.reconnectTimer = setTimeout(() => {
+      this.reconnectDelay = Math.min(30000, this.reconnectDelay * 1.5);
+      this.connectWebSocket();
+    }, this.reconnectDelay);
+  }
+
+  /**
+   * Ingests a single message from Mailpit by ID.
+   * Performs deduplication by Message-ID and Mailpit ID.
+   * Triggers automatic threat analysis in MailTrace SOC.
+   */
+  static async ingestMailpitMessage(mailpitId: string): Promise<{ isNew: boolean; message: ExchangeMessage | null }> {
+    const baseUrl = (process.env.MAILPIT_API_URL || 'http://localhost:8025').replace(/\/$/, '');
+
+    // Check existing by provider ID
+    const existingByProvider = ExchangeDatabase.findByProviderId(mailpitId);
+    if (existingByProvider) {
+      return { isNew: false, message: existingByProvider };
+    }
+
+    try {
+      // 1. Fetch raw RFC 822 MIME
+      const rawRes = await fetch(`${baseUrl}/api/v1/message/${mailpitId}/raw`);
+      const rawMime = rawRes.ok ? await rawRes.text() : '';
+
+      // 2. Fetch JSON metadata
+      const metaRes = await fetch(`${baseUrl}/api/v1/message/${mailpitId}`);
+      const meta = metaRes.ok ? await metaRes.json() : null;
+
+      // 3. Parse with mailparser
+      const parsed = await simpleParser(rawMime || meta?.Snippet || '');
+
+      const rfcMessageId = parsed.messageId || meta?.MessageID || `<mailpit-${mailpitId}@corp.local>`;
+
+      // Check existing by RFC messageId
+      const existingByRfc = ExchangeDatabase.findByMessageId(rfcMessageId);
+      if (existingByRfc) {
+        return { isNew: false, message: existingByRfc };
+      }
+
+      const fromAddr: ExchangeAddress = {
+        name: parsed.from?.value?.[0]?.name || meta?.From?.Name || '',
+        address: parsed.from?.value?.[0]?.address || meta?.From?.Address || 'unknown@remote.local',
+      };
+
+      const toAddrs: ExchangeAddress[] = (parsed.to ? (Array.isArray(parsed.to) ? parsed.to : [parsed.to]) : []).flatMap((t: any) =>
+        (t.value || []).map((v: any) => ({ name: v.name || '', address: v.address || '' }))
+      );
+      if (toAddrs.length === 0 && meta?.To) {
+        toAddrs.push(...meta.To.map((t: any) => ({ name: t.Name || '', address: t.Address || '' })));
+      }
+
+      const ccAddrs: ExchangeAddress[] = (parsed.cc ? (Array.isArray(parsed.cc) ? parsed.cc : [parsed.cc]) : []).flatMap((c: any) =>
+        (c.value || []).map((v: any) => ({ name: v.name || '', address: v.address || '' }))
+      );
+
+      const bccAddrs: ExchangeAddress[] = (parsed.bcc ? (Array.isArray(parsed.bcc) ? parsed.bcc : [parsed.bcc]) : []).flatMap((b: any) =>
+        (b.value || []).map((v: any) => ({ name: v.name || '', address: v.address || '' }))
+      );
+
+      const msgRecord: ExchangeMessage = {
+        id: mailpitId,
+        messageId: rfcMessageId,
+        providerMessageId: mailpitId,
+        folder: 'inbox',
+        from: fromAddr,
+        to: toAddrs.length > 0 ? toAddrs : [{ name: '', address: 'undisclosed-recipients' }],
+        cc: ccAddrs.length > 0 ? ccAddrs : undefined,
+        bcc: bccAddrs.length > 0 ? bccAddrs : undefined,
+        replyTo: parsed.replyTo?.value?.[0]?.address,
+        subject: parsed.subject || meta?.Subject || '(No Subject)',
+        snippet: (parsed.text || meta?.Snippet || '').substring(0, 150),
+        text: parsed.text || '',
+        html: typeof parsed.html === 'string' ? parsed.html : undefined,
+        date: parsed.date ? parsed.date.toISOString() : (meta?.Created || new Date().toISOString()),
+        isRead: false,
+        isStarred: false,
+        hasAttachments: Boolean(parsed.attachments && parsed.attachments.length > 0),
+        rawSource: rawMime || undefined,
+        source: 'mailpit',
+        deliveryStatus: 'DELIVERED TO MAILBOX',
+      };
+
+      const attachments = (parsed.attachments || []).map((att: any) => ({
+        filename: att.filename || 'attachment.dat',
+        contentType: att.contentType || 'application/octet-stream',
+        size: att.size || att.content?.length || 0,
+        data: att.content,
+      }));
+
+      ExchangeDatabase.saveMessage(msgRecord, attachments);
+
+      // Trigger automatic threat analysis in MailTrace SOC
+      if (rawMime) {
+        this.forwardToSocAndEnrich(rawMime, msgRecord.id);
+      }
+
+      return { isNew: true, message: msgRecord };
+    } catch (err) {
+      console.warn(`[MailboxService] Failed to ingest message ${mailpitId}:`, err);
+      return { isNew: false, message: null };
+    }
+  }
+
+  /**
+   * Synchronizes remote incoming messages into the local SQLite store.
+   * Compares message IDs, inserts missing, updates changed, triggers threat analysis.
+   */
+  static async sync(): Promise<{
+    status: string;
+    checked: number;
+    new: number;
+    updated: number;
+    duplicates: number;
+    failed: number;
+  }> {
+    if (this.isSyncing) {
+      return { status: 'busy', checked: 0, new: 0, updated: 0, duplicates: 0, failed: 0 };
+    }
     this.isSyncing = true;
+
+    let checked = 0;
+    let newCount = 0;
+    let updatedCount = 0;
+    let duplicateCount = 0;
+    let failedCount = 0;
 
     try {
       if (process.env.MAILPIT_API_URL?.trim()) {
-        const newCount = await this.syncFromMailpit();
-        ExchangeDatabase.setSyncState('last_synced_at', new Date().toISOString());
-        return { newCount };
+        const baseUrl = process.env.MAILPIT_API_URL.replace(/\/$/, '');
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000);
+
+        const res = await fetch(`${baseUrl}/api/v1/messages?limit=100`, { signal: controller.signal });
+        clearTimeout(timeout);
+
+        if (res.ok) {
+          const data: any = await res.json();
+          const messages = data?.messages || [];
+          checked = messages.length;
+
+          for (const item of messages) {
+            const mailpitId = item.ID;
+            const existing = ExchangeDatabase.findByProviderId(mailpitId) || (item.MessageID ? ExchangeDatabase.findByMessageId(item.MessageID) : null);
+
+            if (existing) {
+              duplicateCount++;
+              // Check if read flag changed
+              if (item.Read !== undefined && Boolean(item.Read) !== existing.isRead) {
+                ExchangeDatabase.updateFlags(existing.id, { isRead: Boolean(item.Read) });
+                updatedCount++;
+              }
+              continue;
+            }
+
+            const result = await this.ingestMailpitMessage(mailpitId);
+            if (result.isNew) {
+              newCount++;
+            } else {
+              duplicateCount++;
+            }
+          }
+
+          ExchangeDatabase.setSyncState('last_synced_at', new Date().toISOString());
+        } else {
+          failedCount++;
+        }
       }
-      return { newCount: 0 };
+
+      return {
+        status: 'success',
+        checked,
+        new: newCount,
+        updated: updatedCount,
+        duplicates: duplicateCount,
+        failed: failedCount,
+      };
     } catch (err: any) {
-      console.warn('[Exchange Mailbox Sync Warning]', err.message);
-      return { newCount: 0, error: err.message };
+      console.warn('[MailboxService Sync Error]', err.message);
+      return {
+        status: 'error',
+        checked,
+        new: newCount,
+        updated: updatedCount,
+        duplicates: duplicateCount,
+        failed: failedCount + 1,
+      };
     } finally {
       this.isSyncing = false;
     }
   }
 
-  private static async syncFromMailpit(): Promise<number> {
-    const baseUrl = process.env.MAILPIT_API_URL!.replace(/\/$/, '');
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 4000);
-
-    const res = await fetch(`${baseUrl}/api/v1/messages?limit=50`, { signal: controller.signal });
-    clearTimeout(timeout);
-    if (!res.ok) return 0;
-
-    const data: any = await res.json();
-    const messages = data?.messages || [];
-    let imported = 0;
-
-    for (const item of messages) {
-      const mailpitId = item.ID;
-      const existing = ExchangeDatabase.getMessageById(mailpitId);
-      if (existing) continue; // Already ingested
-
-      try {
-        // Fetch original raw RFC822 MIME from Mailpit
-        const rawRes = await fetch(`${baseUrl}/api/v1/message/${mailpitId}/raw`);
-        const rawMime = rawRes.ok ? await rawRes.text() : '';
-
-        // Parse with mailparser
-        const parsed = await simpleParser(rawMime || (item.Snippet || ''));
-
-        const fromAddr: ExchangeAddress = {
-          name: parsed.from?.value?.[0]?.name || item.From?.Name || '',
-          address: parsed.from?.value?.[0]?.address || item.From?.Address || 'unknown@remote.local',
-        };
-
-        const toAddrs: ExchangeAddress[] = (parsed.to ? (Array.isArray(parsed.to) ? parsed.to : [parsed.to]) : []).flatMap(t =>
-          (t.value || []).map(v => ({ name: v.name || '', address: v.address || '' }))
-        );
-        if (toAddrs.length === 0 && item.To) {
-          toAddrs.push(...item.To.map((t: any) => ({ name: t.Name || '', address: t.Address || '' })));
-        }
-
-        const msgRecord: ExchangeMessage = {
-          id: mailpitId,
-          messageId: parsed.messageId || item.MessageID || `<${mailpitId}@mailpit.local>`,
-          folder: 'inbox',
-          from: fromAddr,
-          to: toAddrs,
-          replyTo: parsed.replyTo?.value?.[0]?.address,
-          subject: parsed.subject || item.Subject || '(No Subject)',
-          snippet: (parsed.text || item.Snippet || '').substring(0, 150),
-          text: parsed.text || '',
-          html: typeof parsed.html === 'string' ? parsed.html : undefined,
-          date: parsed.date ? parsed.date.toISOString() : (item.Created || new Date().toISOString()),
-          isRead: false,
-          isStarred: false,
-          hasAttachments: Boolean(parsed.attachments && parsed.attachments.length > 0),
-          rawSource: rawMime || undefined,
-        };
-
-        const attachments = (parsed.attachments || []).map(att => ({
-          filename: att.filename || 'attachment.dat',
-          contentType: att.contentType || 'application/octet-stream',
-          size: att.size || att.content.length,
-          data: att.content,
-        }));
-
-        ExchangeDatabase.saveMessage(msgRecord, attachments);
-        imported++;
-
-        // SOC Ingestion Bridge: Send raw RFC822 email to MailTrace SOC in the background
-        if (rawMime && process.env.SOC_BACKEND_URL) {
-          this.forwardToSoc(rawMime);
-        }
-      } catch (itemErr) {
-        console.warn(`[Exchange Sync] Failed to parse message ${mailpitId}:`, itemErr);
-      }
-    }
-
-    return imported;
-  }
-
   /**
    * Ingests a raw RFC 822 MIME string directly into the database.
-   * Parses MIME headers, extracts text/html/attachments, stores raw source byte-for-byte,
-   * and asynchronously forwards to MailTrace SOC.
+   * Performs deduplication and forwards to MailTrace SOC for analysis.
    */
   static async ingestRawEmail(rawMime: string, folder: 'inbox' | 'sent' | 'drafts' | 'trash' | 'spam' = 'inbox'): Promise<ExchangeMessage> {
     const parsed = await simpleParser(rawMime);
+    const rfcMessageId = parsed.messageId || `<msg_${Date.now()}@exchange.local>`;
+
+    // Check existing by RFC messageId
+    const existing = ExchangeDatabase.findByMessageId(rfcMessageId);
+    if (existing) {
+      return existing;
+    }
+
     const id = `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
 
     const fromAddr: ExchangeAddress = {
@@ -155,21 +313,21 @@ export class MailboxService {
       address: parsed.from?.value?.[0]?.address || 'unknown@exchange.local',
     };
 
-    const toAddrs: ExchangeAddress[] = (parsed.to ? (Array.isArray(parsed.to) ? parsed.to : [parsed.to]) : []).flatMap(t =>
-      (t.value || []).map(v => ({ name: v.name || '', address: v.address || '' }))
+    const toAddrs: ExchangeAddress[] = (parsed.to ? (Array.isArray(parsed.to) ? parsed.to : [parsed.to]) : []).flatMap((t: any) =>
+      (t.value || []).map((v: any) => ({ name: v.name || '', address: v.address || '' }))
     );
 
-    const ccAddrs: ExchangeAddress[] = (parsed.cc ? (Array.isArray(parsed.cc) ? parsed.cc : [parsed.cc]) : []).flatMap(t =>
-      (t.value || []).map(v => ({ name: v.name || '', address: v.address || '' }))
+    const ccAddrs: ExchangeAddress[] = (parsed.cc ? (Array.isArray(parsed.cc) ? parsed.cc : [parsed.cc]) : []).flatMap((c: any) =>
+      (c.value || []).map((v: any) => ({ name: v.name || '', address: v.address || '' }))
     );
 
-    const bccAddrs: ExchangeAddress[] = (parsed.bcc ? (Array.isArray(parsed.bcc) ? parsed.bcc : [parsed.bcc]) : []).flatMap(t =>
-      (t.value || []).map(v => ({ name: v.name || '', address: v.address || '' }))
+    const bccAddrs: ExchangeAddress[] = (parsed.bcc ? (Array.isArray(parsed.bcc) ? parsed.bcc : [parsed.bcc]) : []).flatMap((b: any) =>
+      (b.value || []).map((v: any) => ({ name: v.name || '', address: v.address || '' }))
     );
 
     const msgRecord: ExchangeMessage = {
       id,
-      messageId: parsed.messageId || `<${id}@exchange.local>`,
+      messageId: rfcMessageId,
       folder,
       from: fromAddr,
       to: toAddrs.length > 0 ? toAddrs : [{ name: '', address: 'undisclosed-recipients' }],
@@ -185,45 +343,75 @@ export class MailboxService {
       isStarred: false,
       hasAttachments: Boolean(parsed.attachments && parsed.attachments.length > 0),
       rawSource: rawMime,
+      source: 'ingest',
+      deliveryStatus: 'DELIVERED TO MAILBOX',
     };
 
-    const attachments = (parsed.attachments || []).map(att => ({
+    const attachments = (parsed.attachments || []).map((att: any) => ({
       filename: att.filename || 'attachment.dat',
       contentType: att.contentType || 'application/octet-stream',
-      size: att.size || att.content.length,
+      size: att.size || att.content?.length || 0,
       data: att.content,
     }));
 
     ExchangeDatabase.saveMessage(msgRecord, attachments);
 
-    // SOC Ingestion Bridge: Send raw RFC822 email to MailTrace SOC in the background
-    if (process.env.SOC_BACKEND_URL) {
-      this.forwardToSoc(rawMime);
-    }
+    // Forward to SOC and enrich message record with threat classification
+    this.forwardToSocAndEnrich(rawMime, id);
 
     return msgRecord;
   }
 
   /**
    * Forwards the unedited raw RFC822 email to the MailTrace SOC backend for automatic AI analysis.
-   * Completely asynchronous; failures do not disrupt the Exchange client.
+   * Updates the canonical message record with risk score, risk level, classification, and caseId.
    */
-  private static async forwardToSoc(rawEmail: string): Promise<void> {
-    const socUrl = process.env.SOC_BACKEND_URL?.trim();
-    if (!socUrl) return;
+  static async forwardToSocAndEnrich(rawEmail: string, localId: string): Promise<void> {
+    const socUrl = (process.env.SOC_BACKEND_URL || 'http://localhost:5000/api/ingest/email').trim();
 
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 5000);
-      await fetch(socUrl, {
+      const timeout = setTimeout(() => controller.abort(), 6000);
+      const res = await fetch(socUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ rawEmail }),
         signal: controller.signal,
       });
       clearTimeout(timeout);
+
+      if (res.ok) {
+        const data: any = await res.json();
+        if (data.success && typeof data.riskScore === 'number') {
+          ExchangeDatabase.updateThreatScore(
+            localId,
+            data.riskScore,
+            data.riskLevel || 'Clean',
+            data.classification || 'Clean',
+            data.caseId || data.caseNumber
+          );
+        }
+      }
     } catch {
-      // Gracefully ignore SOC transmission interruptions
+      // SOC failures do not disrupt mail client flow
+    }
+  }
+
+  /**
+   * Deletes a message in Mailpit by ID when requested.
+   */
+  static async deleteMailpitMessage(mailpitId: string): Promise<boolean> {
+    const baseUrl = (process.env.MAILPIT_API_URL || 'http://localhost:8025').replace(/\/$/, '');
+    try {
+      const res = await fetch(`${baseUrl}/api/v1/messages`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ID: mailpitId }),
+      });
+      return res.ok;
+    } catch {
+      return false;
     }
   }
 }
+

@@ -54,7 +54,10 @@ app.listen(PORT, async () => {
   console.log(` 🛡️  SOC Forwarding Bridge: ${process.env.SOC_BACKEND_URL ? 'ACTIVE (' + process.env.SOC_BACKEND_URL + ')' : 'DISABLED'}`);
   console.log('=======================================================');
 
-  // Initial Sync & Background Polling Loop (every 10s)
+  // Start Real-Time WebSocket Event Stream from Mailpit
+  MailboxService.startEventStream();
+
+  // Initial Sync & Controlled Fallback Polling Loop (every 10s)
   MailboxService.sync().catch(() => {});
   setInterval(() => {
     MailboxService.sync().catch(() => {});

@@ -442,6 +442,32 @@ apiRouter.post('/analyze/email', async (req: Request, res: Response) => {
   }
 });
 
+// POST /api/ingest/email - Ingest raw RFC822 email from Exchange or mail pipelines
+apiRouter.post('/ingest/email', async (req: Request, res: Response) => {
+  try {
+    const rawEmail = typeof req.body === 'string' ? req.body : (req.body.rawEmail || req.body.emailContent || req.body.rawSource);
+    if (!rawEmail || typeof rawEmail !== 'string' || !rawEmail.trim()) {
+      return res.status(400).json({ error: 'Please provide valid raw RFC822 email content in request body.' });
+    }
+
+    const caseRecord = await runAnalysisPipeline(rawEmail);
+    return res.status(201).json({
+      success: true,
+      caseId: caseRecord.id,
+      caseNumber: caseRecord.caseNumber,
+      classification: caseRecord.classification,
+      riskScore: caseRecord.riskScore,
+      riskLevel: caseRecord.riskLevel,
+      summary: caseRecord.summary,
+      subject: caseRecord.metadata.subject,
+      from: caseRecord.metadata.from.address,
+    });
+  } catch (err: any) {
+    console.error('[MailTrace API] Error ingesting email:', err);
+    return res.status(500).json({ error: err.message || 'Error during email ingestion.' });
+  }
+});
+
 // POST /api/analyze/raw - Raw RFC822 MIME paste
 apiRouter.post('/analyze/raw', async (req: Request, res: Response) => {
   try {

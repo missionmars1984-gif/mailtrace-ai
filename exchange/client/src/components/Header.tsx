@@ -70,7 +70,11 @@ export const Header: React.FC<HeaderProps> = ({
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                 : 'bg-amber-50 text-amber-700 border-amber-200'
             }`}
-            title={status?.smtpMessage || 'Checking SMTP...'}
+            title={
+              status?.smtpConnected
+                ? `SMTP Relay Online: ${status?.smtpHost || 'localhost'}:${status?.smtpPort || 1025} (${status?.smtpMessage || 'Ready'})`
+                : `SMTP Offline: ${status?.smtpMessage || 'Connection refused or not running'}`
+            }
           >
             {status?.smtpConnected ? (
               <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -87,10 +91,14 @@ export const Header: React.FC<HeaderProps> = ({
                 ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
                 : 'bg-slate-50 text-slate-600 border-slate-200'
             }`}
-            title={status?.mailboxMessage || 'Checking Mailbox...'}
+            title={
+              status?.mailboxConnected
+                ? `${status?.mailboxMessage || 'Connected to Mailpit'} (Latency: ${status?.latencyMs ?? 1}ms)`
+                : `Mailbox Offline: ${status?.mailboxMessage || 'Cannot connect to mail service'}`
+            }
           >
             <span className={`w-2 h-2 rounded-full ${status?.mailboxConnected ? 'bg-emerald-500' : 'bg-slate-400'}`} />
-            <span className="capitalize">{status?.mode || 'Mailbox'} Ready</span>
+            <span>{status?.mailboxConnected ? 'Mailpit Online' : 'Mailpit Offline'}</span>
           </div>
         </div>
 

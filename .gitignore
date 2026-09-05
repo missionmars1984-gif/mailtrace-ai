@@ -6,7 +6,9 @@ dist/
 *.env
 *.log
 cloudflared.exe
+*.exe
 server/data/*.db
+server/data/*.db-*
 server/data/*.db-journal
 *.sqlite
 *.sqlite-*

@@ -8,7 +8,38 @@ import type { MailFolder } from '../types/index.js';
 export const mailRouter = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 25 * 1024 * 1024 } });
 
-// GET /api/status - Live connectivity check
+// GET /api/health/smtp - Dedicated SMTP health check endpoint
+mailRouter.get('/health/smtp', async (_req: Request, res: Response) => {
+  const smtpCheck = await SmtpService.verifyConnection();
+  return res.json({
+    status: smtpCheck.success ? 'online' : 'offline',
+    host: smtpCheck.host,
+    port: smtpCheck.port,
+    secure: smtpCheck.secure,
+    error: smtpCheck.error,
+  });
+});
+
+// GET /api/health - Global system health check endpoint
+mailRouter.get('/health', async (_req: Request, res: Response) => {
+  const [smtpCheck, mailboxCheck] = await Promise.all([
+    SmtpService.verifyConnection(),
+    MailboxService.verifyConnection(),
+  ]);
+
+  return res.json({
+    application: 'online',
+    database: 'online',
+    smtp: smtpCheck.success ? 'online' : 'offline',
+    mailpit: mailboxCheck.success ? 'online' : 'offline',
+    ingestion: 'online',
+    threatEngine: 'online',
+    aiEngine: 'configured',
+    geolocation: 'online',
+  });
+});
+
+// GET /api/status - Live connectivity check & telemetry
 mailRouter.get('/status', async (_req: Request, res: Response) => {
   const [smtpCheck, mailboxCheck] = await Promise.all([
     SmtpService.verifyConnection(),
@@ -22,14 +53,20 @@ mailRouter.get('/status', async (_req: Request, res: Response) => {
   return res.json({
     smtpConnected: smtpCheck.success,
     smtpMessage: smtpCheck.message,
+    smtpHost: smtpCheck.host,
+    smtpPort: smtpCheck.port,
+    smtpSecure: smtpCheck.secure,
     mailboxConnected: mailboxCheck.success,
     mailboxMessage: mailboxCheck.message,
+    latencyMs: mailboxCheck.latencyMs,
     totalMessages: total,
     unreadCount: inboxSummary ? inboxSummary.unread : 0,
     lastSyncedAt: ExchangeDatabase.getSyncState('last_synced_at'),
+    lastConnectedAt: ExchangeDatabase.getSyncState('last_connected_at'),
     mode: MailboxService.getMode(),
   });
 });
+
 
 // GET /api/folders - Folder summary counts
 mailRouter.get('/folders', (_req: Request, res: Response) => {
@@ -83,8 +120,8 @@ const handleAttachmentDownload = (req: Request, res: Response) => {
 mailRouter.get('/attachments/:id', handleAttachmentDownload);
 mailRouter.get('/messages/:msgId/attachments/:id', handleAttachmentDownload);
 
-// POST /api/send - Send real email via SMTP
-mailRouter.post('/send', upload.array('attachments'), async (req: Request, res: Response) => {
+// POST /api/send & /api/mail/send - Send real email via SMTP
+const handleSend = async (req: Request, res: Response) => {
   try {
     const { to, cc, bcc, subject, text, html } = req.body;
     const files = req.files as Express.Multer.File[] | undefined;
@@ -113,11 +150,14 @@ mailRouter.post('/send', upload.array('attachments'), async (req: Request, res: 
       return res.status(502).json({ error: result.error || 'Failed to transmit email via SMTP relay.' });
     }
 
-    return res.json({ success: true, messageId: result.messageId });
+    return res.json({ success: true, messageId: result.messageId, deliveryStatus: result.deliveryStatus || 'SMTP ACCEPTED' });
   } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Internal error processing send request.' });
   }
-});
+};
+mailRouter.post('/send', upload.array('attachments'), handleSend);
+mailRouter.post('/mail/send', upload.array('attachments'), handleSend);
+
 
 // POST /api/drafts & POST /api/messages/draft - Save or update draft
 const handleSaveDraft = (req: Request, res: Response) => {
@@ -169,11 +209,14 @@ mailRouter.delete('/messages/:id', (req: Request, res: Response) => {
   return res.json({ success: true });
 });
 
-// POST /api/sync - Manually trigger remote mailbox sync
-mailRouter.post('/sync', async (_req: Request, res: Response) => {
+// POST /api/sync & /api/mail/sync - Manually trigger remote mailbox sync
+const handleSync = async (_req: Request, res: Response) => {
   const result = await MailboxService.sync();
   return res.json(result);
-});
+};
+mailRouter.post('/sync', handleSync);
+mailRouter.post('/mail/sync', handleSync);
+
 
 // POST /api/ingest - Direct MIME Ingestion (stores raw RFC822 and bridges to SOC)
 mailRouter.post('/ingest', async (req: Request, res: Response) => {

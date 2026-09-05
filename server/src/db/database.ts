@@ -27,8 +27,68 @@ if (!fs.existsSync(dbDir)) {
 const dbPath = path.join(dbDir, 'mailtrace.db');
 const db = new DatabaseSync(dbPath);
 
+// Enable WAL mode & busy timeout for concurrent multi-process access
+try {
+  db.exec(`PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;`);
+} catch {}
+
 // Initialize comprehensive schema
 db.exec(`
+  CREATE TABLE IF NOT EXISTS messages (
+    id TEXT PRIMARY KEY,
+    message_id TEXT,
+    provider_message_id TEXT,
+    thread_id TEXT,
+    folder TEXT NOT NULL,
+    from_name TEXT,
+    from_addr TEXT NOT NULL,
+    to_json TEXT NOT NULL,
+    cc_json TEXT,
+    bcc_json TEXT,
+    reply_to TEXT,
+    subject TEXT,
+    snippet TEXT,
+    body_text TEXT,
+    body_html TEXT,
+    date TEXT NOT NULL,
+    is_read INTEGER DEFAULT 0,
+    is_starred INTEGER DEFAULT 0,
+    has_attachments INTEGER DEFAULT 0,
+    raw_source TEXT,
+    source TEXT DEFAULT 'mailpit',
+    delivery_status TEXT DEFAULT 'DELIVERED TO MAILBOX',
+    risk_score INTEGER,
+    risk_level TEXT,
+    threat_classification TEXT,
+    case_id TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS message_attachments (
+    id TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL,
+    filename TEXT NOT NULL,
+    content_type TEXT NOT NULL,
+    size INTEGER NOT NULL,
+    data BLOB,
+    FOREIGN KEY(message_id) REFERENCES messages(id) ON DELETE CASCADE
+  );
+
+  CREATE TABLE IF NOT EXISTS exchange_sync_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_messages_msg_id ON messages(message_id);
+  CREATE INDEX IF NOT EXISTS idx_messages_provider_id ON messages(provider_message_id);
+  CREATE INDEX IF NOT EXISTS idx_messages_thread_id ON messages(thread_id);
+  CREATE INDEX IF NOT EXISTS idx_messages_date ON messages(date DESC);
+  CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages(from_addr);
+  CREATE INDEX IF NOT EXISTS idx_messages_folder ON messages(folder);
+  CREATE INDEX IF NOT EXISTS idx_messages_risk ON messages(risk_score);
+
   CREATE TABLE IF NOT EXISTS cases (
     id TEXT PRIMARY KEY,
     case_number TEXT UNIQUE NOT NULL,

@@ -143,6 +143,53 @@ export const MessageDetail: React.FC<MessageDetailProps> = ({
 
       {/* Message Header Information */}
       <div className="p-6 border-b border-slate-200 select-text">
+        {/* Security & Delivery Assessment Banner */}
+        {typeof message.riskScore === 'number' ? (
+          <div
+            className={`mb-4 px-3 py-2 rounded-md border flex items-center justify-between text-xs ${
+              message.riskScore >= 60
+                ? 'bg-red-50 border-red-200 text-red-800'
+                : message.riskScore >= 30
+                ? 'bg-amber-50 border-amber-200 text-amber-800'
+                : 'bg-emerald-50/70 border-emerald-200 text-emerald-800'
+            }`}
+          >
+            <div className="flex items-center gap-2 font-medium">
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  message.riskScore >= 60
+                    ? 'bg-red-600 animate-pulse'
+                    : message.riskScore >= 30
+                    ? 'bg-amber-500'
+                    : 'bg-emerald-500'
+                }`}
+              />
+              <span>
+                {message.riskScore >= 60
+                  ? `Threat Detected: ${message.threatClassification || 'Malicious / Suspicious'}`
+                  : message.riskScore >= 30
+                  ? `Warning: ${message.threatClassification || 'Suspicious Indicators'}`
+                  : 'MailTrace Security Verified: Clean'}
+              </span>
+              <span className="font-mono text-[11px] opacity-80">(Risk Score: {message.riskScore}/100)</span>
+            </div>
+            <div className="flex items-center gap-2">
+              {message.deliveryStatus && (
+                <span className="text-[11px] font-medium opacity-80">{message.deliveryStatus}</span>
+              )}
+              {message.caseId && (
+                <span className="font-mono text-[11px] font-semibold bg-white/80 px-2 py-0.5 rounded border border-current">
+                  Case {message.caseId}
+                </span>
+              )}
+            </div>
+          </div>
+        ) : message.deliveryStatus ? (
+          <div className="mb-4 px-3 py-1.5 rounded-md bg-slate-50 border border-slate-200 flex items-center justify-between text-xs text-slate-600">
+            <span>Status: <strong>{message.deliveryStatus}</strong></span>
+          </div>
+        ) : null}
+
         <h1 className="text-lg font-semibold text-slate-900 mb-4 leading-snug">
           {message.subject || '(No Subject)'}
         </h1>

@@ -16,6 +16,8 @@ export type MailFolder = 'inbox' | 'sent' | 'drafts' | 'trash' | 'spam';
 export interface ExchangeMessage {
   id: string;
   messageId: string;
+  providerMessageId?: string;
+  threadId?: string;
   folder: MailFolder;
   from: ExchangeAddress;
   to: ExchangeAddress[];
@@ -32,6 +34,12 @@ export interface ExchangeMessage {
   hasAttachments: boolean;
   attachments?: ExchangeAttachment[];
   rawSource?: string;
+  source?: string;
+  deliveryStatus?: string;
+  riskScore?: number;
+  riskLevel?: string;
+  threatClassification?: string;
+  caseId?: string;
 }
 
 export interface FolderSummary {
@@ -43,11 +51,16 @@ export interface FolderSummary {
 export interface MailboxStatus {
   smtpConnected: boolean;
   smtpMessage: string;
+  smtpHost?: string;
+  smtpPort?: string | number;
+  smtpSecure?: boolean;
   mailboxConnected: boolean;
   mailboxMessage: string;
+  latencyMs?: number;
   totalMessages: number;
   unreadCount: number;
   lastSyncedAt: string | null;
+  lastConnectedAt?: string | null;
   mode: string;
 }
 

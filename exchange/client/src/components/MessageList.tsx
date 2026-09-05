@@ -269,12 +269,41 @@ export const MessageList: React.FC<MessageListProps> = ({
                     {msg.snippet || '(No text content)'}
                   </div>
 
-                  {msg.hasAttachments && (
-                    <div className="mt-1 flex items-center gap-1 text-[11px] text-slate-400">
-                      <Paperclip className="w-3 h-3" />
-                      <span>Attachment</span>
-                    </div>
-                  )}
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+                    {msg.deliveryStatus && (
+                      <span className="px-1.5 py-0.5 rounded font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                        {msg.deliveryStatus}
+                      </span>
+                    )}
+
+                    {typeof msg.riskScore === 'number' && (
+                      <span
+                        className={`px-1.5 py-0.5 rounded font-semibold border ${
+                          msg.riskScore >= 60
+                            ? 'bg-red-50 text-red-700 border-red-200'
+                            : msg.riskScore >= 30
+                            ? 'bg-amber-50 text-amber-700 border-amber-200'
+                            : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                        }`}
+                        title={`Threat Score: ${msg.riskScore}/100 (${msg.threatClassification || msg.riskLevel || 'Analyzed'})`}
+                      >
+                        {msg.riskScore >= 60 ? `Threat ${msg.riskScore}` : msg.riskScore >= 30 ? `Warning ${msg.riskScore}` : 'Clean'}
+                      </span>
+                    )}
+
+                    {msg.caseId && (
+                      <span className="px-1.5 py-0.5 rounded font-mono text-slate-500 bg-slate-100 border border-slate-200" title={`SOC Incident Case: ${msg.caseId}`}>
+                        {msg.caseId}
+                      </span>
+                    )}
+
+                    {msg.hasAttachments && (
+                      <span className="flex items-center gap-1 text-slate-400 ml-auto">
+                        <Paperclip className="w-3 h-3" />
+                        <span>Attachment</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );

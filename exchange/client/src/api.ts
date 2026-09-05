@@ -55,16 +55,31 @@ export async function deleteMessage(id: string): Promise<void> {
   if (!res.ok) throw new Error('Failed to delete message');
 }
 
-export async function syncMailbox(): Promise<{ synced: number; total: number }> {
-  const res = await fetch(`${API_BASE}/sync`, {
+export interface SyncStats {
+  status: string;
+  checked: number;
+  new: number;
+  updated: number;
+  duplicates: number;
+  failed: number;
+}
+
+export interface SendResult {
+  success: boolean;
+  messageId: string;
+  deliveryStatus?: string;
+}
+
+export async function syncMailbox(): Promise<SyncStats> {
+  const res = await fetch(`${API_BASE}/mail/sync`, {
     method: 'POST',
   });
   if (!res.ok) throw new Error('Failed to sync mailbox');
   return res.json();
 }
 
-export async function sendMessage(formData: FormData): Promise<{ success: boolean; messageId: string }> {
-  const res = await fetch(`${API_BASE}/send`, {
+export async function sendMessage(formData: FormData): Promise<SendResult> {
+  const res = await fetch(`${API_BASE}/mail/send`, {
     method: 'POST',
     body: formData,
   });
