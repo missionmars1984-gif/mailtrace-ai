@@ -1,0 +1,24 @@
+{
+  "name": "mailtrace-exchange",
+  "version": "1.0.0",
+  "private": true,
+  "description": "MailTrace Exchange — Dedicated Enterprise Mail Sending & Receiving Platform",
+  "scripts": {
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build:server": "npm --prefix server run build",
+    "build:client": "npm --prefix client run build",
+    "build": "npm run build:server && npm run build:client",
+    "start": "node server/dist/index.js",
+    "install:all": "npm --prefix server install && npm --prefix client install"
+  },
+  "keywords": [
+    "enterprise-mail",
+    "email-client",
+    "smtp",
+    "imap",
+    "mailpit"
+  ],
+  "author": "MailTrace Team",
+  "license": "ISC"
+}

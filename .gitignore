@@ -8,3 +8,6 @@ dist/
 cloudflared.exe
 server/data/*.db
 server/data/*.db-journal
+*.sqlite
+*.sqlite-*
+exchange/data/
