@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MailTrace AI - High-Depth System Architecture</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #0b0f19; color: #f1f5f9; font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif; }
+    .badge-chip { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.75rem; }
+  </style>
+</head>
+<body class="antialiased p-4 sm:p-8 max-w-6xl mx-auto">
+  <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
+    
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-5 gap-4">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="inline-block w-3 h-3 rounded-full bg-emerald-500 animate-pulse"></span>
+          <h1 class="text-2xl font-bold tracking-tight text-white flex items-center gap-2">
+            🛡️ MailTrace AI <span class="text-xs px-2.5 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/40">Full Deep-Tier Architecture</span>
+          </h1>
+        </div>
+        <p class="text-sm text-slate-400 mt-1">
+          Complete Architectural Blueprint: Multi-Model Threat Engine, Kinematic Geo-Attribution, and SQLite-WAL Shared Bus
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="expandAll()" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">Expand All</button>
+        <button onclick="collapseAll()" class="text-xs px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 transition">Collapse</button>
+      </div>
+    </div>
+
+    <!-- Interactive Navigation Tabs -->
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-center text-xs font-medium">
+      <button onclick="filterLayer('all')" id="btn-all" class="p-2.5 rounded-lg bg-cyan-500 text-slate-950 font-bold transition">Full Pipeline</button>
+      <button onclick="filterLayer('l1-l2')" id="btn-l1-l2" class="p-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">Ingestion & Transport</button>
+      <button onclick="filterLayer('l3')" id="btn-l3" class="p-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">7 Forensic Engines</button>
+      <button onclick="filterLayer('geo')" id="btn-geo" class="p-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">Kinematic Geo-Attribution</button>
+      <button onclick="filterLayer('l4-l5')" id="btn-l4-l5" class="p-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 transition">Fusion & SQLite WAL</button>
+    </div>
+
+    <!-- Architecture Visual Flow Stack -->
+    <div class="space-y-5" id="architecture-stack">
+
+      <!-- ========================================================================= -->
+      <!-- LAYER 1: CLIENT PRESENTATION & USER EXPERIENCE -->
+      <!-- ========================================================================= -->
+      <div class="layer-block rounded-xl border border-cyan-500/30 bg-cyan-950/20 p-5 transition hover:border-cyan-500/60" data-layer="l1-l2">
+        <div class="flex items-center justify-between cursor-pointer select-none" onclick="toggleDetails('details-l1')">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-cyan-500/20 text-cyan-400 font-bold flex items-center justify-center text-sm">L1</span>
+            <div>
+              <h3 class="text-base font-semibold text-cyan-300">Presentation Layer (Dual React SPAs)</h3>
+              <p class="text-xs text-slate-400">SOC Analyst Dashboard (:5000) & Enterprise Webmail Client (:5001)</p>
+            </div>
+          </div>
+          <span id="icon-details-l1" class="text-xs font-mono text-cyan-400">▼ Expand</span>
+        </div>
+
+        <div id="details-l1" class="mt-4 pt-4 border-t border-cyan-500/20 space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="p-4 rounded-lg bg-slate-900/90 border border-slate-800">
+              <div class="flex justify-between items-center mb-2">
+                <span class="font-semibold text-sm text-cyan-300">🛡️ SOC Threat Portal (Port 5000)</span>
+                <span class="badge-chip px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300">client/src</span>
+              </div>
+              <ul class="text-xs text-slate-300 space-y-1.5 list-disc list-inside">
+                <li><strong>Live Telemetry Radar:</strong> Server-Sent Events subscriber (<code class="text-cyan-400 font-mono">LiveMonitorPage.tsx:51</code>) with zero client-side polling.</li>
+                <li><strong>Forensic Dossier:</strong> Deep inspection of threat vectors, interactive entity IOC graphs, and transit hop traces.</li>
+                <li><strong>Interactive AI Copilot:</strong> Context-aware LLM investigator grounded in specific extracted message evidence.</li>
+              </ul>
+            </div>
+            <div class="p-4 rounded-lg bg-slate-900/90 border border-slate-800">
+              <div class="flex justify-between items-center mb-2">
+                <span class="font-semibold text-sm text-blue-300">✉️ MailTrace Exchange (Port 5001)</span>
+                <span class="badge-chip px-2 py-0.5 rounded bg-blue-500/20 text-blue-300">exchange/client</span>
+              </div>
+              <ul class="text-xs text-slate-300 space-y-1.5 list-disc list-inside">
+                <li><strong>Webmail Suite:</strong> Inbox, Sent, Archive, and Trash folders with real-time risk classification pills.</li>
+                <li><strong>Automatic Threat Sync:</strong> Messages sent or received update threat score badges within &lt;1 second.</li>
+                <li><strong>Direct SOC Escalation:</strong> Embedded <code class="text-blue-400 font-mono">[🛡️ View in SOC]</code> deep link to open forensic dossier.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connector Line -->
+      <div class="flex justify-center -my-3"><div class="w-0.5 h-6 bg-gradient-to-b from-cyan-500 to-indigo-500"></div></div>
+
+      <!-- ========================================================================= -->
+      <!-- LAYER 2: TRANSPORT PROTOCOLS & INGESTION GATEWAY -->
+      <!-- ========================================================================= -->
+      <div class="layer-block rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-5 transition hover:border-indigo-500/60" data-layer="l1-l2">
+        <div class="flex items-center justify-between cursor-pointer select-none" onclick="toggleDetails('details-l2')">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-indigo-500/20 text-indigo-400 font-bold flex items-center justify-center text-sm">L2</span>
+            <div>
+              <h3 class="text-base font-semibold text-indigo-300">Ingestion Gateway & Deduplication Bus</h3>
+              <p class="text-xs text-slate-400">RFC 5321 SMTP Listener (:1025), REST MIME Ingestion & 30s Anti-Echo Guard</p>
+            </div>
+          </div>
+          <span id="icon-details-l2" class="text-xs font-mono text-indigo-400">▼ Expand</span>
+        </div>
+
+        <div id="details-l2" class="mt-4 pt-4 border-t border-indigo-500/20 space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+              <span class="text-xs font-semibold text-indigo-300">1. Embedded SMTP Server (:1025)</span>
+              <p class="text-xs text-slate-400 mt-1">
+                Runs RFC 5321 daemon via <code class="font-mono text-indigo-400">EmbeddedSmtpServer.ts:25</code>. Intercepts raw network mail and triggers background SOC forwarder.
+              </p>
+            </div>
+            <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+              <span class="text-xs font-semibold text-indigo-300">2. Ingestion REST API</span>
+              <p class="text-xs text-slate-400 mt-1">
+                <code class="font-mono text-indigo-400">POST /api/ingest/email</code> accepts raw RFC 822 MIME payloads or EML files with multi-target candidate resolution.
+              </p>
+            </div>
+            <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+              <span class="text-xs font-semibold text-indigo-300">3. Deduplication Engine</span>
+              <p class="text-xs text-slate-400 mt-1">
+                <code class="font-mono text-indigo-400">database.ts:74</code> matches Message-ID and a 30-second burst window to prevent duplicate cases on simultaneous send/receive.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connector Line -->
+      <div class="flex justify-center -my-3"><div class="w-0.5 h-6 bg-gradient-to-b from-indigo-500 to-purple-500"></div></div>
+
+      <!-- ========================================================================= -->
+      <!-- LAYER 3: 7 SPECIALIZED FORENSIC ENGINES -->
+      <!-- ========================================================================= -->
+      <div class="layer-block rounded-xl border border-purple-500/30 bg-purple-950/20 p-5 transition hover:border-purple-500/60" data-layer="l3">
+        <div class="flex items-center justify-between cursor-pointer select-none" onclick="toggleDetails('details-l3')">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-purple-500/20 text-purple-400 font-bold flex items-center justify-center text-sm">L3</span>
+            <div>
+              <h3 class="text-base font-semibold text-purple-300">7-Engine Defense-in-Depth Forensic Pipeline</h3>
+              <p class="text-xs text-slate-400">Concurrent multi-modal feature extraction executing in <code class="font-mono text-purple-300">runAnalysisPipeline()</code></p>
+            </div>
+          </div>
+          <span id="icon-details-l3" class="text-xs font-mono text-purple-400">▲ Collapse</span>
+        </div>
+
+        <div id="details-l3" class="mt-4 pt-4 border-t border-purple-500/20 space-y-3">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+            
+            <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+              <div class="flex justify-between font-semibold text-purple-300">
+                <span>Model A: NLP Classifier</span>
+                <span class="text-purple-400 font-mono">nlpClassifier.ts:35</span>
+              </div>
+              <p class="text-slate-400 mt-1">
+                Calibrated TF-IDF vectorizer + Gemini 1.5 Flash GenAI. Multi-label probability distribution: Phishing, BEC, Credential Theft, Legitimate.
+              </p>
+            </div>
+
+            <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+              <div class="flex justify-between font-semibold text-purple-300">
+                <span>Model B: URL Risk Model</span>
+                <span class="text-purple-400 font-mono">urlRiskModel.ts:25</span>
+              </div>
+              <p class="text-slate-400 mt-1">
+                Calculates Shannon Entropy: <code class="text-purple-400 font-mono">H = -Σ P(x) log₂(P(x))</code>. Detects homograph brand impersonation, suspicious TLDs, and IP hostnames.
+              </p>
+            </div>
+
+            <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+              <div class="flex justify-between font-semibold text-purple-300">
+                <span>Model C: Sender Identity</span>
+                <span class="text-purple-400 font-mono">identityModel.ts:35</span>
+              </div>
+              <p class="text-slate-400 mt-1">
+                Alignment matrix comparing Display Name vs From Header vs Reply-To vs Return-Path vs RFC 5321 Envelope. Detects executive name masquerading.
+              </p>
+            </div>
+
+            <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+              <div class="flex justify-between font-semibold text-purple-300">
+                <span>Model D: BEC & Wire Fraud</span>
+                <span class="text-purple-400 font-mono">becModel.ts:40</span>
+              </div>
+              <p class="text-slate-400 mt-1">
+                Combinatorial heuristic engine detecting urgent wire transfers, banking instructions, direct deposit payroll alterations, and gift card extortion.
+              </p>
+            </div>
+
+            <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+              <div class="flex justify-between font-semibold text-purple-300">
+                <span>Model E: Attachment Forensics</span>
+                <span class="text-purple-400 font-mono">attachmentModel.ts:30</span>
+              </div>
+              <p class="text-slate-400 mt-1">
+                Detects double extension masking (e.g. <code class="text-purple-400 font-mono">invoice.pdf.exe</code>), macro-enabled Office payloads, and generates SHA-256 binary digests.
+              </p>
+            </div>
+
+            <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+              <div class="flex justify-between font-semibold text-purple-300">
+                <span>Model F: Header & Cryptography</span>
+                <span class="text-purple-400 font-mono">headerModel.ts:30</span>
+              </div>
+              <p class="text-slate-400 mt-1">
+                Cryptographic authentication validation: RFC 7208 SPF pass/fail, RFC 6376 DKIM signature validation, and RFC 7489 DMARC policy alignment.
+              </p>
+            </div>
+
+          </div>
+
+          <div class="p-3.5 rounded-lg bg-amber-950/20 border border-amber-500/30 text-xs">
+            <span class="font-semibold text-amber-300">🧠 Social Engineering Engine (9 Psychological Dimensions)</span>
+            <p class="text-slate-300 mt-1">
+              Scans textual cues across 9 behavioral vectors: <span class="text-amber-200">Urgency, Fear/Intimidation, Authority, Scarcity, Financial Greed, Social Proof, Secrecy, Sympathy, Reciprocity</span>.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connector Line -->
+      <div class="flex justify-center -my-3"><div class="w-0.5 h-6 bg-gradient-to-b from-purple-500 to-emerald-500"></div></div>
+
+      <!-- ========================================================================= -->
+      <!-- LAYER 4: MULTI-SIGNAL GEOLOCATION ATTRIBUTION & KINEMATICS -->
+      <!-- ========================================================================= -->
+      <div class="layer-block rounded-xl border border-emerald-500/30 bg-emerald-950/20 p-5 transition hover:border-emerald-500/60" data-layer="geo">
+        <div class="flex items-center justify-between cursor-pointer select-none" onclick="toggleDetails('details-geo')">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-emerald-500/20 text-emerald-400 font-bold flex items-center justify-center text-sm">GEO</span>
+            <div>
+              <h3 class="text-base font-semibold text-emerald-300">Multi-Signal Kinematic Geolocation Attribution</h3>
+              <p class="text-xs text-slate-400">3-Tier Hypothesis Splitting, Impossible Travel Physics & Solar Longitude Verification</p>
+            </div>
+          </div>
+          <span id="icon-details-geo" class="text-xs font-mono text-emerald-400">▲ Collapse</span>
+        </div>
+
+        <div id="details-geo" class="mt-4 pt-4 border-t border-emerald-500/20 space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            
+            <div class="p-3.5 rounded-lg bg-slate-900/90 border border-slate-800">
+              <span class="text-xs font-semibold text-emerald-300">Tier 1: Infrastructure Location</span>
+              <p class="text-xs text-slate-400 mt-1">
+                Resolves transmitting MTA relay IP via local GeoIP cache. Datacenter / cloud hosting classification applies a 65% penalty to prevent attributing server hosting to user workstation.
+              </p>
+              <div class="badge-chip mt-2 text-emerald-400">locationEvidenceFusion.ts:71</div>
+            </div>
+
+            <div class="p-3.5 rounded-lg bg-slate-900/90 border border-slate-800">
+              <span class="text-xs font-semibold text-emerald-300">Tier 2: Interaction Telemetry</span>
+              <p class="text-xs text-slate-400 mt-1">
+                Captures recipient tracking pixel opens & link clicks. Strict filtering detects Apple Mail Privacy Protection (MPP) & Google Image Proxy to avoid false location alerts.
+              </p>
+              <div class="badge-chip mt-2 text-emerald-400">locationEvidenceFusion.ts:152</div>
+            </div>
+
+            <div class="p-3.5 rounded-lg bg-slate-900/90 border border-slate-800">
+              <span class="text-xs font-semibold text-emerald-300">Tier 3: Submitting Workstation</span>
+              <p class="text-xs text-slate-400 mt-1">
+                Extracts earliest originating hop (e.g. <code class="font-mono text-emerald-400">X-Originating-IP</code>). Boosts confidence for verified residential/mobile ISPs; zeros coordinates for RFC 1918 private IPs.
+              </p>
+              <div class="badge-chip mt-2 text-emerald-400">locationEvidenceFusion.ts:250</div>
+            </div>
+
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+            <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+              <span class="font-semibold text-emerald-400">🚀 Impossible Travel Kinematics</span>
+              <p class="text-slate-400 mt-1">
+                Calculates Haversine distance: <code class="text-emerald-300 font-mono">d = 2R · arcsin(√(sin²(Δφ/2) + cos φ₁ cos φ₂ sin²(Δλ/2)))</code>. If velocity <code class="text-emerald-300 font-mono">v = d / Δt > 900 km/h</code> over &gt;250 km, flags CRITICAL Impossible Travel anomaly.
+              </p>
+            </div>
+            <div class="p-3 rounded-lg bg-slate-900/90 border border-slate-800">
+              <span class="font-semibold text-emerald-400">☀️ Solar Timezone vs Longitude</span>
+              <p class="text-slate-400 mt-1">
+                Compares RFC 822 <code class="text-emerald-300 font-mono">Date:</code> header timezone offset against physical longitude (15° rotation per hour). Discrepancy &gt; 3 hours flags High-Severity Timezone Spoofing.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Connector Line -->
+      <div class="flex justify-center -my-3"><div class="w-0.5 h-6 bg-gradient-to-b from-emerald-500 to-amber-500"></div></div>
+
+      <!-- ========================================================================= -->
+      <!-- LAYER 5: EVIDENCE FUSION, CRYPTOGRAPHY & SQLITE-WAL BUS -->
+      <!-- ========================================================================= -->
+      <div class="layer-block rounded-xl border border-amber-500/30 bg-amber-950/20 p-5 transition hover:border-amber-500/60" data-layer="l4-l5">
+        <div class="flex items-center justify-between cursor-pointer select-none" onclick="toggleDetails('details-l5')">
+          <div class="flex items-center gap-3">
+            <span class="w-8 h-8 rounded-lg bg-amber-500/20 text-amber-400 font-bold flex items-center justify-center text-sm">L5</span>
+            <div>
+              <h3 class="text-base font-semibold text-amber-300">Evidence Fusion, Cryptographic Hashes & SQLite WAL Bus</h3>
+              <p class="text-xs text-slate-400">Calibrated Risk Scoring, Tamper-Proof Chain-of-Custody & Shared Multi-Process Database</p>
+            </div>
+          </div>
+          <span id="icon-details-l5" class="text-xs font-mono text-amber-400">▼ Expand</span>
+        </div>
+
+        <div id="details-l5" class="mt-4 pt-4 border-t border-amber-500/20 space-y-3">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            
+            <div class="p-3.5 rounded-lg bg-slate-900/90 border border-slate-800">
+              <span class="text-xs font-semibold text-amber-300">1. Calibrated Fusion Engine</span>
+              <p class="text-xs text-slate-400 mt-1">
+                Calculates weighted base risk + synergistic compounding bonuses (e.g. DMARC Fail + Wire Request = +25). Dampens score when cryptographically verified benign evidence exists.
+              </p>
+              <div class="badge-chip mt-2 text-amber-400">riskEngine.ts:60</div>
+            </div>
+
+            <div class="p-3.5 rounded-lg bg-slate-900/90 border border-slate-800">
+              <span class="text-xs font-semibold text-amber-300">2. Cryptographic Integrity</span>
+              <p class="text-xs text-slate-400 mt-1">
+                Generates dual SHA-256 hashes: <code class="font-mono text-amber-400">evidence_hash</code> (sealing raw envelope & findings) and <code class="font-mono text-amber-400">report_hash</code> (sealing executive dossier). Guarantees legal chain-of-custody.
+              </p>
+              <div class="badge-chip mt-2 text-amber-400">forensicHash.ts:10</div>
+            </div>
+
+            <div class="p-3.5 rounded-lg bg-slate-900/90 border border-slate-800">
+              <span class="text-xs font-semibold text-amber-300">3. Unified SQLite WAL Bus</span>
+              <p class="text-xs text-slate-400 mt-1">
+                Single <code class="font-mono text-amber-400">mailtrace.db</code> accessed via Node.js 22 <code class="font-mono text-amber-400">DatabaseSync</code>. Configured with <code class="font-mono text-amber-400">PRAGMA journal_mode = WAL</code> and 5000ms timeout for lockless concurrent reads/writes.
+              </p>
+              <div class="badge-chip mt-2 text-amber-400">server/src/db/database.ts:28</div>
+            </div>
+
+          </div>
+
+          <!-- Relational Database Schema Chips -->
+          <div class="p-3.5 rounded-lg bg-slate-900/90 border border-slate-800">
+            <span class="text-xs font-semibold text-slate-200">Relational Table Topology (SQLite 3):</span>
+            <div class="flex flex-wrap gap-2 mt-2">
+              <span class="px-2.5 py-1 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20 text-xs font-mono">cases (Verdict, 0-100 Score, Hashes)</span>
+              <span class="px-2.5 py-1 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 text-xs font-mono">messages (Webmail Store & Threat Pill)</span>
+              <span class="px-2.5 py-1 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20 text-xs font-mono">indicators (Normalized IOCs)</span>
+              <span class="px-2.5 py-1 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-xs font-mono">geo_locations (7-Day TTL GeoIP Cache)</span>
+              <span class="px-2.5 py-1 rounded bg-cyan-500/10 text-cyan-300 border border-cyan-500/20 text-xs font-mono">reports (Dossiers & PDF Exports)</span>
+              <span class="px-2.5 py-1 rounded bg-rose-500/10 text-rose-300 border border-rose-500/20 text-xs font-mono">tracking_events (Opens & Clicks)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer Live Status Strip -->
+    <div class="flex flex-col sm:flex-row items-center justify-between pt-4 border-t border-slate-800 text-xs text-slate-400 gap-2">
+      <div class="flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+        <span>Node.js 22 Native Engine</span>
+        <span class="text-slate-600">•</span>
+        <span>Zero Native C++ Dependencies</span>
+        <span class="text-slate-600">•</span>
+        <span>Real-Time SSE Broadcast Active</span>
+      </div>
+      <div class="font-mono text-xs text-cyan-400">
+        SOC :5000 ⇄ Exchange :5001 ⇄ SMTP :1025
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    function toggleDetails(id) {
+      const el = document.getElementById(id);
+      const icon = document.getElementById('icon-' + id);
+      if (el.classList.contains('hidden')) {
+        el.classList.remove('hidden');
+        if (icon) icon.textContent = '▲ Collapse';
+      } else {
+        el.classList.add('hidden');
+        if (icon) icon.textContent = '▼ Expand';
+      }
+    }
+
+    function expandAll() {
+      ['details-l1', 'details-l2', 'details-l3', 'details-geo', 'details-l5'].forEach(id => {
+        const el = document.getElementById(id);
+        const icon = document.getElementById('icon-' + id);
+        if (el) el.classList.remove('hidden');
+        if (icon) icon.textContent = '▲ Collapse';
+      });
+    }
+
+    function collapseAll() {
+      ['details-l1', 'details-l2', 'details-l3', 'details-geo', 'details-l5'].forEach(id => {
+        const el = document.getElementById(id);
+        const icon = document.getElementById('icon-' + id);
+        if (el) el.classList.add('hidden');
+        if (icon) icon.textContent = '▼ Expand';
+      });
+    }
+
+    function filterLayer(layer) {
+      const blocks = document.querySelectorAll('.layer-block');
+      const buttons = ['btn-all', 'btn-l1-l2', 'btn-l3', 'btn-geo', 'btn-l4-l5'];
+      
+      buttons.forEach(b => {
+        const btn = document.getElementById(b);
+        if (btn) {
+          btn.classList.remove('bg-cyan-500', 'text-slate-950', 'font-bold');
+          btn.classList.add('bg-slate-800', 'text-slate-300');
+        }
+      });
+
+      const activeBtn = document.getElementById('btn-' + layer);
+      if (activeBtn) {
+        activeBtn.classList.remove('bg-slate-800', 'text-slate-300');
+        activeBtn.classList.add('bg-cyan-500', 'text-slate-950', 'font-bold');
+      }
+
+      blocks.forEach(b => {
+        if (layer === 'all' || b.getAttribute('data-layer') === layer) {
+          b.style.display = 'block';
+        } else {
+          b.style.display = 'none';
+        }
+      });
+    }
+  </script>
+</body>
+</html>
